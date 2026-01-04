@@ -1,0 +1,59 @@
+'use client';
+
+import { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react';
+import { SearchFilters, initialFilters, FilterKey, Option } from '../types/filters';
+
+interface SearchFiltersContextType {
+  filters: SearchFilters;
+  updateFilter: (key: FilterKey, value: Option[]) => void;
+  updateSortBy: (sortBy: string) => void;
+  clearFilters: () => void;
+  hasActiveFilters: boolean;
+}
+
+const SearchFiltersContext = createContext<SearchFiltersContextType | undefined>(undefined);
+
+export function SearchFiltersProvider({ children }: { children: ReactNode }) {
+  const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+
+  const updateFilter = useCallback((key: FilterKey, value: Option[]) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const updateSortBy = useCallback((sortBy: string) => {
+    setFilters(prev => ({ ...prev, sortBy }));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters(initialFilters);
+  }, []);
+
+  const hasActiveFilters = useMemo(() => {
+    return filters.subjects.length > 0 ||
+           filters.courses.length > 0 ||
+           filters.instructors.length > 0 ||
+           filters.requirements.length > 0;
+  }, [filters]);
+
+  const value = useMemo(() => ({
+    filters,
+    updateFilter,
+    updateSortBy,
+    clearFilters,
+    hasActiveFilters
+  }), [filters, updateFilter, updateSortBy, clearFilters, hasActiveFilters]);
+
+  return (
+    <SearchFiltersContext.Provider value={value}>
+      {children}
+    </SearchFiltersContext.Provider>
+  );
+}
+
+export function useSearchFilters() {
+  const context = useContext(SearchFiltersContext);
+  if (context === undefined) {
+    throw new Error('useSearchFilters must be used within a SearchFiltersProvider');
+  }
+  return context;
+}
