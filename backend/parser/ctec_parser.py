@@ -301,43 +301,50 @@ class CTECParser:
         audience_size = None
         response_count = None
         
-        # Split into lines to handle the specific CTEC format where 
-        # headers and numbers are on separate lines
+        # Look for the specific patterns in CTEC format:
+        # The PDF format has header lines followed by numbers:
+        # "Courses Audience :"       (line 1)
+        # "Responses Received :"     (line 2)  
+        # "Response Ratio :"         (line 3)
+        # ...
+        # "217"                      (line 7 - audience)
+        # "183"                      (line 8 - responses)
+        # "84.3%"                    (line 9 - ratio)
+        
         lines = raw_text.split('\n')
         
-        # Look for the header section and then find the corresponding numbers
-        audience_line_idx = None
-        response_line_idx = None
+        # Find the positions of the headers
+        audience_line = None
+        response_line = None
         
         for i, line in enumerate(lines):
-            if re.search(r'Courses?\s+Audience\s*:', line, re.IGNORECASE):
-                audience_line_idx = i
-            elif re.search(r'Responses?\s+Received\s*:', line, re.IGNORECASE):
-                response_line_idx = i
+            line_stripped = line.strip()
+            if re.match(r'^Courses?\s+Audience\s*:\s*$', line_stripped, re.IGNORECASE):
+                audience_line = i
+            elif re.match(r'^Responses?\s+Received\s*:\s*$', line_stripped, re.IGNORECASE):
+                response_line = i
         
-        # Now look for numbers after we've found all the headers
-        if audience_line_idx is not None or response_line_idx is not None:
-            # Find the first numeric lines after the headers
-            numbers_found = []
-            start_search = min(idx for idx in [audience_line_idx, response_line_idx] if idx is not None)
+        # If we found the headers, extract the corresponding numbers
+        if audience_line is not None and response_line is not None:
+            # Look for numeric lines after the headers
+            numbers = []
+            start_search = max(audience_line, response_line) + 1
             
-            for i in range(start_search + 1, min(start_search + 15, len(lines))):
+            for i in range(start_search, min(start_search + 10, len(lines))):
                 number_match = re.match(r'^\s*(\d+)\s*$', lines[i])
                 if number_match:
-                    numbers_found.append(int(number_match.group(1)))
-                    if len(numbers_found) >= 2:  # We have both audience and response
+                    numbers.append(int(number_match.group(1)))
+                    if len(numbers) >= 2:  # We have both audience and responses
                         break
             
-            # Assign the first two numbers found to audience and response
-            if len(numbers_found) >= 2:
-                audience_size = numbers_found[0]
-                response_count = numbers_found[1]
-            elif len(numbers_found) == 1:
-                # If only one number found, determine which one based on which header we found
-                if audience_line_idx is not None and response_line_idx is None:
-                    audience_size = numbers_found[0]
-                elif response_line_idx is not None and audience_line_idx is None:
-                    response_count = numbers_found[0]
+            # Assign numbers based on header order
+            if len(numbers) >= 2:
+                if audience_line < response_line:
+                    audience_size = numbers[0]
+                    response_count = numbers[1]
+                else:
+                    response_count = numbers[0] 
+                    audience_size = numbers[1]
         
         self._log_debug(f"Extracted audience: {audience_size}, responses: {response_count}")
         
@@ -468,7 +475,7 @@ class CTECParser:
         question_key = "Estimate the average number of hours per week you spent on this course outside of class and lab time"
         if not question_match:
             # Fallback to shorter version if full text not found
-            question_key = "Hours per week spent on coursework"
+            question_key = "Estimate the average number of hours per week you spent on this course outside of class and lab time"
         
         distributions = {question_key: {}}
         

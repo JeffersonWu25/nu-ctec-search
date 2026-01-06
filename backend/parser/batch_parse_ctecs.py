@@ -4,13 +4,15 @@ Batch CTEC Parser Script
 
 Processes all CTEC PDF files in docs/samples and outputs structured JSON
 ready for database upload. Handles errors gracefully and continues processing.
+Can also parse individual files when called with specific arguments.
 """
 
 import json
 import sys
+import argparse
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from ctec_parser import CTECParser, ParserConfig
 
@@ -51,6 +53,15 @@ def validate_extraction_success(data: Dict[str, Any]) -> Dict[str, Any]:
     if not offering.get('quarter') or not offering.get('year'):
         validation_result["checks"]["term_info"] = False
         validation_result["issues"].append("Missing quarter or year")
+    
+    # Check audience size and response count
+    if offering.get('audience_size') is None:
+        validation_result["checks"]["term_info"] = False
+        validation_result["issues"].append("Missing audience size")
+    
+    if offering.get('response_count') is None:
+        validation_result["checks"]["term_info"] = False
+        validation_result["issues"].append("Missing response count")
     
     # Check survey categories (should have 10)
     survey_responses = data.get('survey_responses', {})
@@ -114,8 +125,8 @@ def create_course_offering_record(course_info) -> Dict[str, Any]:
     return {
         "quarter": course_info.quarter,
         "year": course_info.year,
-        "audience_size": None,
-        "response_count": None,
+        "audience_size": course_info.audience_size,
+        "response_count": course_info.response_count,
         "section": section
     }
 
@@ -132,40 +143,41 @@ def create_comment_records(comments: List[str]) -> List[Dict[str, Any]]:
 
 def create_survey_responses_records(survey_responses: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
     """Create survey responses in human-readable format."""
-    # Map the actual question names from OCR to display names
+    # Only include overrides where the OCR key differs from the display label.
     question_mapping = {
-        "Provide an overall rating of the instruction": "Provide an overall rating of the instruction",
-        "Provide an overall rating of the course": "Provide an overall rating of the course", 
-        "Estimate how much you learned in the course": "Estimate how much you learned in the course",
-        "Rate the effectiveness of the course in challenging you intellectually": "Rate the effectiveness of the course in challenging you intellectually",
-        "Rate the effectiveness of the instructor in stimulating your interest in the subject": "Rate the effectiveness of the instructor in stimulating your interest in the subject",
-        "school_name": "School/Department",
-        "class_year": "Class Year",
-        "reason_for_taking_course": "Reason for taking course",
-        "prior_interest": "Prior interest level",
-        "Estimate the average number of hours per week you spent on this course outside of class and lab time": "Hours per week spent on coursework"
+        "school_name": "What is the name of your school?",
+        "class_year": "Your Class",
+        "reason_for_taking_course": "What is your reason for taking the course? (mark all that apply)",
+        "prior_interest": "What was your Interest in this subject before taking the course?",
     }
     
     structured_responses = {}
     
     for question_name, data in survey_responses.items():
-        if question_name in question_mapping and data:
-            display_name = question_mapping[question_name]
-            structured_responses[display_name] = data
-        elif data:  # Pass through unmapped questions as-is
-            structured_responses[question_name] = data
+        if not data:
+            continue
+        display_name = question_mapping.get(question_name, question_name)
+        structured_responses[display_name] = data
             
     return structured_responses
 
 
-def process_single_ctec(parser: CTECParser, pdf_path: Path) -> Dict[str, Any]:
+def process_single_ctec(parser: CTECParser, pdf_path: Path, json_mode: bool = False) -> Dict[str, Any]:
     """
     Process a single CTEC file and return structured data.
+    
+    Args:
+        parser: CTECParser instance
+        pdf_path: Path to PDF file
+        json_mode: If True, send progress to stderr instead of stdout
     
     Returns:
         Dictionary with parsed data or error information
     """
-    print(f"Processing: {pdf_path.name}")
+    if json_mode:
+        print(f"Processing: {pdf_path.name}", file=sys.stderr)
+    else:
+        print(f"Processing: {pdf_path.name}")
     
     try:
         # Parse the CTEC
@@ -197,7 +209,10 @@ def process_single_ctec(parser: CTECParser, pdf_path: Path) -> Dict[str, Any]:
         
     except Exception as e:
         error_msg = f"Failed to parse {pdf_path.name}: {str(e)}"
-        print(f"  ✗ {error_msg}")
+        if json_mode:
+            print(f"  ✗ {error_msg}", file=sys.stderr)
+        else:
+            print(f"  ✗ {error_msg}")
         
         return {
             "status": "error",
@@ -207,11 +222,68 @@ def process_single_ctec(parser: CTECParser, pdf_path: Path) -> Dict[str, Any]:
         }
 
 
+def parse_single_file(pdf_path: Path, output_json: bool = False) -> Dict[str, Any]:
+    """
+    Parse a single CTEC PDF file.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        output_json: Whether to output JSON to stdout
+        
+    Returns:
+        Parsed CTEC data dictionary
+    """
+    config = ParserConfig(
+        debug=False,
+        validate_ocr_totals=False,
+        continue_on_ocr_errors=True,
+        extract_comments=True,
+        extract_demographics=True,
+        extract_time_survey=True
+    )
+    parser = CTECParser(config)
+    
+    result = process_single_ctec(parser, pdf_path, json_mode=output_json)
+    
+    if output_json:
+        print(json.dumps(result, indent=2))
+    
+    return result
+
+
 def main():
-    """Main batch processing function."""
-    # Setup paths
+    """Main function with support for batch and single file processing."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="CTEC Parser - Batch or Single File")
+    parser.add_argument("--file", type=str, help="Parse a single PDF file")
+    parser.add_argument("--json", action="store_true", help="Output JSON to stdout (for single file)")
+    parser.add_argument("--upload-dir", type=str, help="Use custom upload directory instead of docs/samples")
+    
+    args = parser.parse_args()
+    
+    # Handle single file parsing
+    if args.file:
+        pdf_path = Path(args.file)
+        if not pdf_path.exists():
+            print(f"Error: File not found: {pdf_path}")
+            sys.exit(1)
+        
+        if not pdf_path.suffix.lower() == '.pdf':
+            print(f"Error: File must be a PDF: {pdf_path}")
+            sys.exit(1)
+        
+        result = parse_single_file(pdf_path, output_json=args.json)
+        sys.exit(0 if result["status"] == "success" else 1)
+    
+    # Handle batch processing
     script_dir = Path(__file__).parent
-    samples_dir = script_dir.parent.parent / "docs" / "samples"
+    
+    # Use custom upload directory if provided, otherwise default to docs/samples
+    if args.upload_dir:
+        samples_dir = Path(args.upload_dir)
+    else:
+        samples_dir = script_dir.parent.parent / "docs" / "samples"
+    
     output_file = script_dir / "parsed_ctecs.json"
     
     print(f"CTEC Batch Parser")
@@ -251,7 +323,7 @@ def main():
     failed = 0
     
     for pdf_file in sorted(pdf_files):
-        result = process_single_ctec(parser, pdf_file)
+        result = process_single_ctec(parser, pdf_file, json_mode=False)
         results.append(result)
         
         if result["status"] == "success":
