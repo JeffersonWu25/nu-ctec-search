@@ -15,8 +15,7 @@ class Department(BaseModel):
 
 class Course(BaseModel):
     course_code: str = Field(..., description="Full normalized course code (e.g., 'ANTHRO_275-0')")
-    title: str = Field(..., description="Course title")
-    description: str = Field(..., description="Course description")
+    description: str = Field(..., description="Course description (cleaned)")
     prerequisites_text: Optional[str] = Field(None, description="Prerequisites text or None")
     requirements: List[str] = Field(default_factory=list, description="List of distribution requirements")
     

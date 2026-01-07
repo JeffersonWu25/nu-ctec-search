@@ -88,9 +88,6 @@ class CatalogScraper:
         with self._lock:
             self._scraped_data.departments = departments
         
-        # Save intermediate results
-        self._save_intermediate_data("departments.json", departments)
-        
         return departments
     
     def _scrape_courses_parallel(self, departments: List[Department]):
@@ -117,13 +114,6 @@ class CatalogScraper:
                     completed += 1
                     self.logger.info(f"Completed {dept.name} ({completed}/{len(departments)}): "
                                    f"{len(courses)} courses")
-                    
-                    # Save incremental progress
-                    if completed % 5 == 0:  # Save every 5 departments
-                        self._save_intermediate_data(
-                            f"courses_progress_{completed}.json", 
-                            self._scraped_data.courses
-                        )
                         
                 except Exception as e:
                     self.logger.error(f"Failed to scrape {dept.name}: {str(e)}")
@@ -140,46 +130,37 @@ class CatalogScraper:
             return []
     
     def save_to_json(self, filename: str = "catalog_data.json") -> Path:
-        """Save scraped data to JSON file."""
+        """Save scraped courses to JSON file."""
         output_path = self.output_dir / filename
         
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(
-                    self._scraped_data.model_dump(),
-                    f,
-                    indent=2,
-                    ensure_ascii=False
-                )
+            # Save just the courses array for simpler consumption
+            courses_data = [course.model_dump() for course in self._scraped_data.courses]
             
-            self.logger.info(f"Saved data to {output_path}")
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(courses_data, f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"Saved {len(courses_data)} courses to {output_path}")
             return output_path
             
         except Exception as e:
             self.logger.error(f"Failed to save data: {str(e)}")
             raise
     
-    def _save_intermediate_data(self, filename: str, data):
-        """Save intermediate data for debugging/recovery."""
-        try:
-            output_path = self.output_dir / filename
-            with open(output_path, 'w', encoding='utf-8') as f:
-                if hasattr(data, 'model_dump'):
-                    json.dump(data.model_dump(), f, indent=2, ensure_ascii=False)
-                elif isinstance(data, list) and data and hasattr(data[0], 'model_dump'):
-                    json.dump([item.model_dump() for item in data], f, indent=2, ensure_ascii=False)
-                else:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                    
-        except Exception as e:
-            self.logger.warning(f"Failed to save intermediate data to {filename}: {str(e)}")
     
     def get_stats(self) -> dict:
         """Get scraping statistics."""
+        # Extract department codes from course codes (before underscore)
+        departments_with_courses = set()
+        for course in self._scraped_data.courses:
+            dept_code = course.course_code.split('_')[0] if '_' in course.course_code else ''
+            if dept_code:
+                departments_with_courses.add(dept_code)
+        
         return {
             "departments_count": len(self._scraped_data.departments),
             "courses_count": len(self._scraped_data.courses),
-            "departments_with_courses": len(set(c.department_code for c in self._scraped_data.courses)),
+            "departments_with_courses": len(departments_with_courses),
             "sample_departments": [d.name for d in self._scraped_data.departments[:5]],
-            "sample_courses": [f"{c.code}: {c.title}" for c in self._scraped_data.courses[:5]]
+            "sample_courses": [c.course_code for c in self._scraped_data.courses[:5]]
         }

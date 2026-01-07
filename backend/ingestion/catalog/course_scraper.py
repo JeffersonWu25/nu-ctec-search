@@ -101,14 +101,12 @@ class CourseScraper:
             if '_' in course_identifier:
                 # Already has department - use as full code
                 full_course_code = course_identifier
-                course_num = course_identifier.split('_')[-1]  # Extract just the number part
             else:
                 # Just a number - combine with department
-                course_num = course_identifier
-                full_course_code = f"{dept_code}_{course_num}"
+                full_course_code = f"{dept_code}_{course_identifier}"
             
-            # Extract description
-            description = self._extract_description(block, text)
+            # Extract description (pass course info for cleaning)
+            description = self._extract_description(block, text, course_identifier, title)
             
             # Extract prerequisites
             prereqs = self._extract_prerequisites(text)
@@ -118,7 +116,6 @@ class CourseScraper:
             
             return Course(
                 course_code=full_course_code,  # Use the normalized full code
-                title=title,
                 description=description or "",  # Ensure description is not None
                 prerequisites_text=prereqs,
                 requirements=requirements  # Already a list
@@ -159,8 +156,8 @@ class CourseScraper:
         return None
     
     
-    def _extract_description(self, block: Tag, text: str) -> Optional[str]:
-        """Extract course description from the block."""
+    def _extract_description(self, block: Tag, text: str, course_identifier: str, title: str) -> Optional[str]:
+        """Extract and clean course description from the block."""
         # Try to find description in structured elements first
         desc_selectors = ['.description', '.course-description', 'p']
         
@@ -169,14 +166,18 @@ class CourseScraper:
             if desc_elem:
                 desc_text = desc_elem.get_text(strip=True)
                 if len(desc_text) > 50:  # Reasonable description length
-                    return desc_text
+                    return self._clean_description(desc_text, course_identifier, title)
         
-        # Fallback: extract from full text after title
-        lines = text.split('\n')
-        if len(lines) > 1:
-            # Skip first line (likely title), take subsequent content
+        # Fallback: extract from full text and clean it
+        # Remove the course header pattern from the beginning
+        cleaned_text = self._clean_description(text, course_identifier, title)
+        
+        if cleaned_text:
+            # Split into lines and process
+            lines = cleaned_text.split('\n')
             description_lines = []
-            for line in lines[1:]:
+            
+            for line in lines:
                 line = line.strip()
                 if line and not self._is_metadata_line(line):
                     description_lines.append(line)
@@ -187,6 +188,34 @@ class CourseScraper:
                 return ' '.join(description_lines)
         
         return None
+    
+    def _clean_description(self, text: str, course_identifier: str, title: str) -> str:
+        """Remove course header information from description text."""
+        # Simple approach: look for pattern "DEPT NUM-SUFFIX TITLE (X Unit)" at the start
+        # and remove everything up to the closing parenthesis + Unit
+        
+        # Pattern to match course headers like "AFST 101-8 First-Year Writing Seminar (1 Unit)"
+        unit_pattern = r'^[A-Z\s]+\d{3}-[A-Z0-9]+\s+[^()]*\(\d+(?:\.\d+)?\s+Units?\)'
+        
+        match = re.match(unit_pattern, text)
+        if match:
+            # Remove the matched header
+            header_end = match.end()
+            cleaned_text = text[header_end:].strip()
+            return cleaned_text
+        
+        # Fallback: try to remove just course code and title without units
+        # Look for "DEPT NUM-SUFFIX TITLE" at the start and remove it
+        code_title_pattern = r'^[A-Z\s]+\d{3}-[A-Z0-9]+\s+[^.]*?(?=\s[A-Z][a-z])'
+        
+        match = re.match(code_title_pattern, text)
+        if match:
+            header_end = match.end()
+            cleaned_text = text[header_end:].strip()
+            return cleaned_text
+        
+        # If no header pattern found, return original text
+        return text
     
     def _extract_prerequisites(self, text: str) -> Optional[str]:
         """Extract prerequisites information from Northwestern course text."""

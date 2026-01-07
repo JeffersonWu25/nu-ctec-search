@@ -61,6 +61,10 @@ class DepartmentScraper:
                 if not dept_name:
                     continue
                 
+                # Skip non-department links like PDFs
+                if href.endswith('.pdf') or 'pdf' in dept_name.lower():
+                    continue
+                
                 # Build full URL
                 full_url = f"https://catalogs.northwestern.edu{href}" if href.startswith('/') else href
                 
