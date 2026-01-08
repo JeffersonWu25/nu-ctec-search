@@ -29,21 +29,21 @@ STANDARD_QUESTIONS = [
 
 # Standard options for Likert scale questions (1-6)
 LIKERT_OPTIONS = [
-    {"label": "1", "ordinal": 1, "numeric_value": 1},
-    {"label": "2", "ordinal": 2, "numeric_value": 2},
-    {"label": "3", "ordinal": 3, "numeric_value": 3},
-    {"label": "4", "ordinal": 4, "numeric_value": 4},
-    {"label": "5", "ordinal": 5, "numeric_value": 5},
-    {"label": "6", "ordinal": 6, "numeric_value": 6},
+    {"label": "1", "ordinal": 1, "numeric_value": 1, "is_open_ended_max": False},
+    {"label": "2", "ordinal": 2, "numeric_value": 2, "is_open_ended_max": False},
+    {"label": "3", "ordinal": 3, "numeric_value": 3, "is_open_ended_max": False},
+    {"label": "4", "ordinal": 4, "numeric_value": 4, "is_open_ended_max": False},
+    {"label": "5", "ordinal": 5, "numeric_value": 5, "is_open_ended_max": False},
+    {"label": "6", "ordinal": 6, "numeric_value": 6, "is_open_ended_max": False},
 ]
 
 # Time range options
 TIME_RANGE_OPTIONS = [
-    {"label": "3 or fewer", "ordinal": 1, "max_value": 3},
-    {"label": "4 - 7", "ordinal": 2, "min_value": 4, "max_value": 7},
-    {"label": "8 - 11", "ordinal": 3, "min_value": 8, "max_value": 11},
-    {"label": "12 - 15", "ordinal": 4, "min_value": 12, "max_value": 15},
-    {"label": "16 - 19", "ordinal": 5, "min_value": 16, "max_value": 19},
+    {"label": "3 or fewer", "ordinal": 1, "max_value": 3, "is_open_ended_max": False},
+    {"label": "4 - 7", "ordinal": 2, "min_value": 4, "max_value": 7, "is_open_ended_max": False},
+    {"label": "8 - 11", "ordinal": 3, "min_value": 8, "max_value": 11, "is_open_ended_max": False},
+    {"label": "12 - 15", "ordinal": 4, "min_value": 12, "max_value": 15, "is_open_ended_max": False},
+    {"label": "16 - 19", "ordinal": 5, "min_value": 16, "max_value": 19, "is_open_ended_max": False},
     {"label": "20 or more", "ordinal": 6, "min_value": 20, "is_open_ended_max": True},
 ]
 

@@ -10,15 +10,17 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from ..parsing.ctec.ctec_parser import CTECParser, ParserConfig, CTECData
-from ..db.courses import get_courses_lookup, get_course_by_code
+from ..db.courses import get_courses_lookup, get_course_by_code, create_course
 from ..db.ctecs import (
     upsert_instructors, 
     upsert_course_offerings,
     upsert_comments,
-    upsert_survey_questions,
     upsert_ratings,
+    upsert_rating_distributions,
     get_instructors_lookup,
-    get_survey_questions_lookup
+    get_survey_questions_lookup,
+    get_ratings_by_offering,
+    get_survey_question_options
 )
 from ..utils.file_helpers import find_pdf_files, confirm_operation
 from ..utils.logging import get_job_logger
@@ -118,11 +120,22 @@ def upload_ctec_data(ctec_data: CTECData, file_identifier: str = "") -> Dict:
         course_id = course_lookup.get(ctec_data.course_info.code)
         
         if not course_id:
-            # Course doesn't exist - this is likely an error in data
-            logger.warning(f"Course {ctec_data.course_info.code} not found in database")
-            return {
-                'error': f'Course {ctec_data.course_info.code} not found in database. Upload courses first.'
-            }
+            # Course doesn't exist - create it from CTEC data
+            logger.info(f"Course {ctec_data.course_info.code} not found in database, creating new course record")
+            
+            created_course = create_course(
+                code=ctec_data.course_info.code,
+                title=ctec_data.course_info.title,
+                department_id=None  # Will be filled in later by department mapping process
+            )
+            
+            if not created_course:
+                return {
+                    'error': f'Failed to create course record for {ctec_data.course_info.code}'
+                }
+            
+            course_id = created_course['id']
+            logger.info(f"Successfully created course record: {ctec_data.course_info.code} (ID: {course_id})")
         
         # Step 2: Upsert instructor
         instructor_data = [{'name': ctec_data.course_info.instructor}]
@@ -208,40 +221,119 @@ def upload_ctec_data(ctec_data: CTECData, file_identifier: str = "") -> Dict:
 
 def upload_survey_responses(course_offering_id: str, survey_responses: Dict[str, Any]) -> int:
     """
-    Upload survey questions and ratings for a course offering.
+    Upload survey questions, ratings, and rating distributions for a course offering.
     
     Args:
         course_offering_id: UUID of the course offering
-        survey_responses: Dictionary of survey responses
+        survey_responses: Dictionary of survey responses with distributions
         
     Returns:
         Number of ratings uploaded
     """
     logger = get_job_logger('upload_survey')
     
-    # Step 1: Ensure survey questions exist
-    question_data = [{'question': question} for question in survey_responses.keys()]
-    upsert_survey_questions(question_data)
-    
-    # Step 2: Get question lookup
+    # Step 1: Get question lookup (questions should already exist from setup)
     questions_lookup = get_survey_questions_lookup()
     
-    # Step 3: Create ratings for each question
+    # Step 2: Create ratings for each question using mapped names
     rating_data = []
-    for question_text, responses in survey_responses.items():
-        if question_text in questions_lookup:
-            question_id = questions_lookup[question_text]
+    for question_key, response_data in survey_responses.items():
+        
+        if question_key in questions_lookup:
+            question_id = questions_lookup[question_key]
             rating_data.append({
                 'course_offering_id': course_offering_id,
                 'survey_question_id': question_id
             })
+        else:
+            logger.warning(f"Question not found after mapping: {question_key}")
     
-    # Step 4: Upload ratings
+    # Step 3: Upload ratings (this creates the rating records)
+    ratings_uploaded = 0
     if rating_data:
         rating_results = upsert_ratings(rating_data)
-        return rating_results.get('uploaded', 0)
+        ratings_uploaded = rating_results.get('uploaded', 0)
     
-    return 0
+    # Step 4: Upload rating distributions (the actual vote counts)
+    if ratings_uploaded > 0:
+        upload_rating_distributions(course_offering_id, survey_responses, questions_lookup)
+    
+    return ratings_uploaded
+
+
+def upload_rating_distributions(course_offering_id: str, survey_responses: Dict[str, Any], questions_lookup: Dict[str, str]) -> None:
+    """
+    Upload rating distributions (vote counts) for survey responses.
+    
+    Args:
+        course_offering_id: UUID of the course offering
+        survey_responses: Dictionary of survey responses with distributions
+        questions_lookup: Dictionary mapping question text to question IDs
+    """
+    logger = get_job_logger('upload_distributions')
+    
+    # Get all ratings for this course offering
+    ratings = get_ratings_by_offering(course_offering_id)
+    rating_lookup = {
+        (rating['course_offering_id'], rating['survey_question_id']): rating['id']
+        for rating in ratings
+    }
+    
+    distribution_data = []
+    
+    for question, response_data in survey_responses.items():
+        
+        if question not in questions_lookup:
+            logger.warning(f"Question not found in lookup: {question}")
+            continue
+            
+        question_id = questions_lookup[question]
+        rating_key = (course_offering_id, question_id)
+        
+        if rating_key not in rating_lookup:
+            logger.warning(f"No rating found for question: {question}")
+            continue
+            
+        rating_id = rating_lookup[rating_key]
+        
+        # Get survey question options for this question
+        options = get_survey_question_options(question_id)
+        if not options:
+            logger.warning(f"No options found for question: {question}")
+            continue
+            
+        # Create option lookup: always match by label
+        option_lookup = {option['label']: option['id'] for option in options}
+        logger.debug(f"Question: {question[:50]}... using label matching with {len(option_lookup)} options")
+        
+        # Handle distribution data
+        if isinstance(response_data, dict):
+            # Match each response key to options
+            for response_key, count in response_data.items():
+                # Convert response key to string to match option labels
+                response_key_str = str(response_key)
+                if response_key_str in option_lookup:
+                    distribution_data.append({
+                        'rating_id': rating_id,
+                        'option_id': option_lookup[response_key_str],
+                        'count': count  # Include zero counts
+                    })
+                    logger.debug(f"Matched '{response_key}' -> count: {count}")
+                else:
+                    logger.warning(f"No option found for response key '{response_key}' in question: {question[:30]}...")
+                    logger.debug(f"Available options: {list(option_lookup.keys())}")
+        else:
+            logger.warning(f"Unexpected response format for {question}: {type(response_data)}")
+    
+    # Upload distribution data
+    if distribution_data:
+        distribution_results = upsert_rating_distributions(distribution_data)
+        logger.info(f"Uploaded {distribution_results.get('uploaded', 0)} rating distributions")
+        
+        if distribution_results.get('errors'):
+            logger.warning(f"Distribution upload errors: {distribution_results['errors']}")
+    else:
+        logger.warning("No distribution data to upload - check option matching")
 
 
 def process_ctec_batch(upload_dir: Path, dry_run: bool = False, parser_config: Optional[ParserConfig] = None) -> Dict:

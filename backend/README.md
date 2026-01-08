@@ -125,6 +125,9 @@ python -m app.jobs.upload_ctecs --file path/to/ctec.pdf
 # Preview what would be uploaded
 python -m app.jobs.upload_ctecs --file path/to/ctec.pdf --dry-run
 
+# Show detailed parsed data in JSON format
+python -m app.jobs.upload_ctecs --file path/to/ctec.pdf --dry-run --verbose
+
 # Enable debug mode for parsing issues
 python -m app.jobs.upload_ctecs --file path/to/ctec.pdf --debug
 ```
@@ -139,7 +142,20 @@ python -m app.jobs.upload_ctecs --all --upload-dir /path/to/pdfs
 
 # Continue processing even if some PDFs fail OCR validation
 python -m app.jobs.upload_ctecs --all --continue-on-errors
+
+# Show detailed data for each file (useful for debugging)
+python -m app.jobs.upload_ctecs --all --dry-run --verbose
 ```
+
+#### CTEC Upload Options
+
+- `--file path.pdf`: Upload a single PDF file
+- `--all`: Process all PDFs in the upload directory  
+- `--upload-dir path`: Use custom directory instead of docs/upload
+- `--dry-run`: Preview changes without uploading to database
+- `--verbose`: Show detailed parsed data in JSON format (includes all comments, ratings, demographics)
+- `--debug`: Enable debug output for troubleshooting parsing issues
+- `--continue-on-errors`: Continue processing other files if OCR validation fails
 
 ### 🔧 System Setup
 

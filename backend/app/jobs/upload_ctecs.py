@@ -8,10 +8,11 @@ Usage:
 
 import sys
 import argparse
+import json
 from pathlib import Path
 
 from ..services.ctec_service import parse_and_upload_ctec, process_ctec_batch
-from ..parsing.ctec.ctec_parser import ParserConfig
+from ..parsing.ctec.ctec_parser import ParserConfig, CTECParser
 from ..utils.logging import get_job_logger
 from ..settings import settings
 
@@ -37,7 +38,7 @@ def print_batch_summary(results: dict):
             print(f"   ... and {len(errors) - 10} more errors")
 
 
-def print_single_file_summary(result: dict):
+def print_single_file_summary(result: dict, verbose: bool = False):
     """Print single file upload summary."""
     print("\n" + "=" * 50)
     print("📊 UPLOAD RESULT")
@@ -59,6 +60,13 @@ def print_single_file_summary(result: dict):
             print("\n🎉 Upload successful!")
         else:
             print(f"\n❌ Upload failed: {upload_results.get('error', 'Unknown error')}")
+            
+        # Show detailed JSON data if verbose mode is enabled
+        if verbose and 'parsed_data' in result:
+            print("\n" + "=" * 50)
+            print("📋 DETAILED PARSED DATA")
+            print("=" * 50)
+            print(json.dumps(result['parsed_data'], indent=2, ensure_ascii=False))
     else:
         print(f"File: {result['file']}")
         print(f"❌ Parse failed: {result.get('error', 'Unknown error')}")
@@ -71,11 +79,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m app.jobs.upload_ctecs                                 # Interactive mode (if implemented)
-  python -m app.jobs.upload_ctecs --file doc.pdf                 # Upload single file
-  python -m app.jobs.upload_ctecs --all                          # Upload all files in docs/upload
-  python -m app.jobs.upload_ctecs --all --upload-dir /custom/dir # Use custom directory
-  python -m app.jobs.upload_ctecs --file doc.pdf --dry-run       # Preview single file
+  python -m app.jobs.upload_ctecs --file doc.pdf                    # Upload single file
+  python -m app.jobs.upload_ctecs --file doc.pdf --dry-run          # Preview single file
+  python -m app.jobs.upload_ctecs --file doc.pdf --dry-run --verbose # Show detailed parsed data
+  python -m app.jobs.upload_ctecs --all                             # Upload all files in docs/upload
+  python -m app.jobs.upload_ctecs --all --upload-dir /custom/dir    # Use custom directory
+  python -m app.jobs.upload_ctecs --file doc.pdf --debug            # Enable debug mode
         """
     )
     
@@ -109,6 +118,11 @@ Examples:
         action='store_true',
         help='Continue processing even if OCR validation fails'
     )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show detailed parsed data in JSON format'
+    )
     
     args = parser.parse_args()
     
@@ -135,9 +149,23 @@ Examples:
                 sys.exit(1)
             
             print(f"🚀 Uploading single file: {pdf_path.name}")
+            
+            # If verbose mode, parse the data separately to include in output
+            if args.verbose:
+                try:
+                    parser = CTECParser(parser_config)
+                    ctec_data = parser.parse_ctec(str(pdf_path))
+                    parsed_data_dict = ctec_data.to_dict()
+                except Exception as e:
+                    parsed_data_dict = {"error": f"Failed to parse for verbose output: {e}"}
+            
             result = parse_and_upload_ctec(pdf_path, dry_run=args.dry_run, parser_config=parser_config)
             
-            print_single_file_summary(result)
+            # Add parsed data to result for verbose output
+            if args.verbose:
+                result['parsed_data'] = parsed_data_dict
+            
+            print_single_file_summary(result, verbose=args.verbose)
             
             if result['status'] == 'success' and result['upload_results'].get('uploaded'):
                 sys.exit(0)

@@ -412,18 +412,18 @@ class CTECParser:
         
         demographics_text = text[start:]
         distributions = {
-            "school_name": {},
-            "class_year": {},
-            "reason_for_taking_course": {},
-            "prior_interest": {}
+            "What is the name of your school?": {},
+            "Your Class": {},
+            "What is your reason for taking the course? (mark all that apply)": {},
+            "What was your Interest in this subject before taking the course?": {}
         }
         
         # Extract distributions for each category
         categories = [
-            (DEPARTMENTS, "school_name"),
-            (CLASS_YEAR, "class_year"),
-            (DISTRIBUTION_REQUIREMENT, "reason_for_taking_course"),
-            (PRIOR_INTEREST, "prior_interest")
+            (DEPARTMENTS, "What is the name of your school?"),
+            (CLASS_YEAR, "Your Class"),
+            (DISTRIBUTION_REQUIREMENT, "What is your reason for taking the course? (mark all that apply)"),
+            (PRIOR_INTEREST, "What was your Interest in this subject before taking the course?")
         ]
         
         for items, category in categories:
@@ -432,7 +432,7 @@ class CTECParser:
                 match = re.search(pattern, demographics_text, flags=re.MULTILINE)
                 if match:
                     key = item
-                    if category == "prior_interest":
+                    if category == "What was your Interest in this subject before taking the course?":
                         if item == "1-Not interested at all":
                             key = "1"
                         elif item == "6-Extremely interested":
@@ -512,11 +512,58 @@ class CTECParser:
                 calculated_total = sum(distribution.values())
                 
                 if ocr_total != calculated_total:
+                    # Try alternative extraction patterns before failing
+                    alt_distribution = self._try_alternative_distribution_extraction(text)
+                    if alt_distribution:
+                        alt_total = sum(alt_distribution.values())
+                        if alt_total == ocr_total:
+                            self._log_debug(f"Alternative extraction successful: {alt_distribution}")
+                            return alt_distribution
+                    
                     error_msg = f"OCR validation failed for {file_identifier}: Total mismatch (OCR: {ocr_total}, Calculated: {calculated_total})"
                     self._log_debug(error_msg)
+                    self._log_debug(f"Raw distribution found: {distribution}")
+                    self._log_debug(f"OCR text snippet: {text[:200]}...")
                     raise CTECParsingError(error_msg)
         
         return distribution
+    
+    def _try_alternative_distribution_extraction(self, text: str) -> Optional[Dict[int, int]]:
+        """
+        Try alternative patterns for extracting rating distributions when the primary pattern fails.
+        
+        Args:
+            text: OCR text for one question
+            
+        Returns:
+            Alternative distribution dictionary or None if no valid pattern found
+        """
+        # Alternative pattern 1: Numbers with different bracket styles
+        alt_pattern1 = re.compile(r"([1-6])[^\d]*?[\(\[\{](\d+)[\)\]\}]")
+        pairs1 = alt_pattern1.findall(text)
+        if pairs1:
+            distribution1 = {int(k): int(v) for k, v in pairs1 if k.isdigit() and v.isdigit()}
+            if len(distribution1) >= 3:  # At least 3 ratings found
+                self._log_debug(f"Alternative pattern 1 found: {distribution1}")
+                return distribution1
+        
+        # Alternative pattern 2: Look for standalone numbers that might be counts
+        # Find lines with rating-like structure
+        lines = text.split('\n')
+        distribution2 = {}
+        for line in lines:
+            # Look for patterns like "1 (5)" or "Very Low 3" etc.
+            match = re.search(r"(?:^|\s)([1-6])(?:\s*[-–—]\s*\w+)?\s*[\(\[]?(\d+)[\)\]]?", line.strip())
+            if match:
+                rating, count = int(match.group(1)), int(match.group(2))
+                if 1 <= rating <= 6 and count < 1000:  # Sanity check
+                    distribution2[rating] = count
+        
+        if len(distribution2) >= 3:
+            self._log_debug(f"Alternative pattern 2 found: {distribution2}")
+            return distribution2
+        
+        return None
     
     def _extract_survey_distributions_from_ocr(self, ocr_text: str, file_identifier: str = "") -> Dict[str, Dict]:
         """
