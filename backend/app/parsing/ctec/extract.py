@@ -8,8 +8,8 @@ For new code, use ctec_parser.CTECParser instead.
 import re
 import os
 from pypdf import PdfReader
-from ctec_parser import CTECParser
-from constants import DEPARTMENTS, CLASS_YEAR, DISTRIBUTION_REQUIREMENT, PRIOR_INTEREST, TIME_RANGES
+from .ctec_parser import CTECParser
+from .constants import DEPARTMENTS, CLASS_YEAR, DISTRIBUTION_REQUIREMENT, PRIOR_INTEREST, TIME_RANGES
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """

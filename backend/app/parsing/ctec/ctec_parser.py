@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from PIL import Image
 import pytesseract
 from pdf2image import convert_from_path
-from constants import DEPARTMENTS, CLASS_YEAR, DISTRIBUTION_REQUIREMENT, PRIOR_INTEREST, TIME_RANGES
+from .constants import DEPARTMENTS, CLASS_YEAR, DISTRIBUTION_REQUIREMENT, PRIOR_INTEREST, TIME_RANGES
 
 
 @dataclass
