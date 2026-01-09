@@ -180,15 +180,21 @@ def upload_ctec_data(ctec_data: CTECData, file_identifier: str = "") -> Dict:
         # Step 4: Upload comments
         comments_uploaded = 0
         if ctec_data.comments:
+            # Deduplicate comments by content hash before uploading
+            seen_hashes = set()
             comment_data = []
             for comment in ctec_data.comments:
                 # Create content hash for deduplication
                 content_hash = hashlib.sha256(comment.encode('utf-8')).hexdigest()
-                comment_data.append({
-                    'course_offering_id': course_offering_id,
-                    'content': comment,
-                    'content_hash': content_hash
-                })
+                
+                # Skip duplicates within this batch
+                if content_hash not in seen_hashes:
+                    seen_hashes.add(content_hash)
+                    comment_data.append({
+                        'course_offering_id': course_offering_id,
+                        'content': comment,
+                        'content_hash': content_hash
+                    })
             
             comment_results = upsert_comments(comment_data)
             comments_uploaded = comment_results.get('uploaded', 0)

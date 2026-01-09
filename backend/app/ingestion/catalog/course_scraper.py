@@ -138,8 +138,9 @@ class CourseScraper:
         Returns normalized format: "AFST_101-7", title
         """
         # Pattern to match: DEPT_NAME NUMBER-SUFFIX TITLE
-        # Examples: "AFST 101-7", "AFST 360-SA", "ART HIST 211-0"
-        pattern = r'^([A-Z]+(?:\s+[A-Z&]+)*)\s+(\d{3}-(?:\d+|[A-Z]+))\s+(.+)$'
+        # Examples: "AFST 101-7", "AFST 360-SA", "ART HIST 211-0", "COMP_SCI 101-0"
+        # Note: Some departments use underscores (COMP_SCI) instead of spaces
+        pattern = r'^([A-Z_]+(?:\s+[A-Z&_]+)*)\s+(\d{3}-(?:\d+|[A-Z]+))\s+(.+)$'
         
         match = re.search(pattern, text.strip(), re.MULTILINE)
         if match:
@@ -159,7 +160,8 @@ class CourseScraper:
     def _extract_description(self, block: Tag, text: str, course_identifier: str, title: str) -> Optional[str]:
         """Extract and clean course description from the block."""
         # Try to find description in structured elements first
-        desc_selectors = ['.description', '.course-description', 'p']
+        # Note: Computer Science uses <span class="courseblockdesc"> while others use <p class="courseblockdesc">
+        desc_selectors = ['span.courseblockdesc', '.courseblockdesc', '.description', '.course-description', 'p']
         
         for selector in desc_selectors:
             desc_elem = block.select_one(selector)

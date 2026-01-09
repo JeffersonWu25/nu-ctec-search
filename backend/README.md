@@ -46,6 +46,9 @@ python -m app.jobs.<job_name> --help
 
 ### 🏫 Department Management
 
+This goes to this webpage: https://catalogs.northwestern.edu/undergraduate/courses-az/. It identifies all of the departments listed on the page and
+updates the departments table in Supabase. This will likely only ever need to run once because the departments do not change.
+
 #### Scrape and Upload Departments
 ```bash
 # Scrape departments from Northwestern and upload to database
@@ -54,7 +57,7 @@ python -m app.jobs.scrape_departments
 # Preview what would be scraped/uploaded
 python -m app.jobs.scrape_departments --dry-run
 
-# Save scraped data but don't upload
+# Save scraped data in scraped_data folder but don't upload
 python -m app.jobs.scrape_departments --save-only
 ```
 
@@ -74,6 +77,8 @@ python -m app.jobs.upload_departments --scrape
 ```
 
 ### 📚 Course Catalog Management
+
+This goes to this webpage: https://catalogs.northwestern.edu/undergraduate/courses-az/. It creates a list of the links to the department page for each department listed on that website. It then goes through each department page that looks like: https://catalogs.northwestern.edu/undergraduate/courses-az/afst/ and it parses out the description, requirements, and course prerequisites. It then updates the courses table for existing rows. it DOES NOT create new courses if they do not exit. It matches the rows in the requirements table with the correct courses.
 
 #### Scrape and Upload Course Catalog
 ```bash
@@ -104,6 +109,8 @@ python -m app.jobs.upload_catalog --dry-run
 
 ### 🔗 Course-Department Mapping
 
+This links newly uploaded courses with their department in the department table
+
 ```bash
 # Update all courses with department_id based on course codes
 python -m app.jobs.update_course_departments
@@ -116,6 +123,8 @@ python -m app.jobs.update_course_departments --sample 10 --dry-run
 ```
 
 ### 📋 CTEC Processing
+
+This uploads a new CTEC to the database which upserts into the courses and course offerings table, along with adding its comment and ratings
 
 #### Upload Single CTEC
 ```bash
@@ -181,33 +190,21 @@ python -m app.jobs.setup_survey_questions --dry-run
    ```bash
    python -m app.jobs.scrape_departments
    ```
-
-4. **Load course catalog** (if you have courses):
-   ```bash
-   python -m app.jobs.scrape_catalog --limit 3  # Start small
-   ```
-
-5. **Link courses to departments**:
-   ```bash
-   python -m app.jobs.update_course_departments
    ```
 
 ### Regular Data Updates
 
-1. **Update departments** (occasionally):
-   ```bash
-   python -m app.jobs.scrape_departments
-   ```
-
-2. **Update course catalog** (semester/yearly):
+2. **Update Requirements, Descriptions, Prerequisites and Maybe Departments** (rarely):
    ```bash
    python -m app.jobs.scrape_catalog
-   python -m app.jobs.update_course_departments  # Link new courses
+   python -m app.jobs.update_course_departments  # links courses to department
    ```
 
-3. **Process new CTECs** (regularly):
+3. **Process new CTECs** (Every quarter when new CTECs Drop):
    ```bash
    python -m app.jobs.upload_ctecs --all --upload-dir /path/to/new/ctecs
+   python -m app.jobs.scrape_catalog # adds the descriptions, prerequisites
+   python -m app.jobs.update_course_departments  # links courses to department
    ```
 
 ### Development/Testing
