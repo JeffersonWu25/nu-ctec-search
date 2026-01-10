@@ -166,6 +166,45 @@ python -m app.jobs.upload_ctecs --all --dry-run --verbose
 - `--debug`: Enable debug output for troubleshooting parsing issues
 - `--continue-on-errors`: Continue processing other files if OCR validation fails
 
+### 🤖 AI Summary Management
+
+These commands intelligently manage AI-generated summaries with automatic staleness detection and dependency propagation.
+
+#### Refresh AI Summaries
+```bash
+# Refresh all stale AI summaries (recommended)
+python -m app.jobs.refresh_ai_summaries
+
+# Preview what summaries need updates
+python -m app.jobs.refresh_ai_summaries --dry-run
+
+# Refresh only course offering summaries
+python -m app.jobs.refresh_ai_summaries --entity-type course_offering
+
+# Refresh only instructor summaries  
+python -m app.jobs.refresh_ai_summaries --entity-type instructor
+
+# Refresh only course summaries
+python -m app.jobs.refresh_ai_summaries --entity-type course
+
+# Force refresh all summaries (ignores staleness)
+python -m app.jobs.refresh_ai_summaries --force
+```
+
+#### How AI Summary Refresh Works
+
+The system uses intelligent staleness detection:
+- **Course Offering Summaries**: Refreshed when new comments are added to that offering
+- **Instructor Summaries**: Refreshed when any comments change for courses they teach
+- **Course Summaries**: Refreshed when course offering summaries change
+
+**Dependency Order**: The job automatically refreshes in the correct order:
+1. Course offerings first (based on raw comments)
+2. Instructors second (based on comments across all their offerings) 
+3. Courses last (based on their offering summaries)
+
+**Efficiency**: Only entities with actual changes are updated, making the job fast and cost-effective.
+
 ### 🔧 System Setup
 
 ```bash
@@ -205,6 +244,7 @@ python -m app.jobs.setup_survey_questions --dry-run
    python -m app.jobs.upload_ctecs --all --upload-dir /path/to/new/ctecs
    python -m app.jobs.scrape_catalog # adds the descriptions, prerequisites
    python -m app.jobs.update_course_departments  # links courses to department
+   python -m app.jobs.refresh_ai_summaries  # update AI summaries for new data
    ```
 
 ### Development/Testing
@@ -212,6 +252,7 @@ python -m app.jobs.setup_survey_questions --dry-run
 1. **Always use dry-run first**:
    ```bash
    python -m app.jobs.upload_catalog --dry-run
+   python -m app.jobs.refresh_ai_summaries --dry-run
    ```
 
 2. **Test with samples**:
@@ -264,6 +305,18 @@ python -m app.jobs.upload_catalog --scrape --departments COMP_SCI,MATH
 ```bash
 # Batch upload with error tolerance
 python -m app.jobs.upload_ctecs --all --continue-on-errors --upload-dir /ctecs
+```
+
+#### AI Summary Jobs
+```bash
+# Check what needs updating without making changes
+python -m app.jobs.refresh_ai_summaries --dry-run
+
+# Refresh specific entity types only
+python -m app.jobs.refresh_ai_summaries --entity-type instructor
+
+# Force refresh all regardless of staleness (expensive!)
+python -m app.jobs.refresh_ai_summaries --force
 ```
 
 ### Custom File Paths
@@ -344,5 +397,6 @@ Your backend is production-ready with:
 - ✅ Safe dry-run capabilities
 - ✅ Scalable architecture
 - ✅ Detailed logging
+- ✅ Intelligent AI summary management with staleness detection
 
 Start with department setup and work your way up to full CTEC processing!

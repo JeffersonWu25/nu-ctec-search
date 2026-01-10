@@ -23,3 +23,6 @@ python-dotenv==1.2.1
 # Web scraping
 httpx==0.26.0
 beautifulsoup4==4.12.2
+
+#AI summarization
+openai>=1.0.0
