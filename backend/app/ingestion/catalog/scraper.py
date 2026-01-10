@@ -28,6 +28,12 @@ class CatalogScraper:
         # Thread-safe data collection
         self._lock = threading.Lock()
         self._scraped_data = ScrapedCatalogData()
+        
+        # Track department scraping results for validation
+        self._department_results = {
+            'successful': [],  # List of (dept_name, course_count) tuples
+            'failed': [],      # List of (dept_name, error_message) tuples
+        }
     
     def _setup_logging(self):
         """Setup logging configuration."""
@@ -110,13 +116,17 @@ class CatalogScraper:
                     
                     with self._lock:
                         self._scraped_data.courses.extend(courses)
+                        self._department_results['successful'].append((dept.name, len(courses)))
                     
                     completed += 1
                     self.logger.info(f"Completed {dept.name} ({completed}/{len(departments)}): "
                                    f"{len(courses)} courses")
                         
                 except Exception as e:
-                    self.logger.error(f"Failed to scrape {dept.name}: {str(e)}")
+                    error_msg = str(e)
+                    with self._lock:
+                        self._department_results['failed'].append((dept.name, error_msg))
+                    self.logger.error(f"Failed to scrape {dept.name}: {error_msg}")
     
     def _scrape_single_department(self, department: Department) -> List[Course]:
         """Scrape courses for a single department."""
@@ -147,6 +157,20 @@ class CatalogScraper:
             self.logger.error(f"Failed to save data: {str(e)}")
             raise
     
+    
+    def get_department_results(self) -> dict:
+        """Get detailed department scraping results for validation."""
+        return {
+            'total_departments': len(self._scraped_data.departments),
+            'successful_count': len(self._department_results['successful']),
+            'failed_count': len(self._department_results['failed']),
+            'successful_departments': self._department_results['successful'],
+            'failed_departments': self._department_results['failed'],
+            'departments_with_no_courses': [
+                (dept_name, course_count) for dept_name, course_count 
+                in self._department_results['successful'] if course_count == 0
+            ]
+        }
     
     def get_stats(self) -> dict:
         """Get scraping statistics."""

@@ -82,7 +82,7 @@ This goes to this webpage: https://catalogs.northwestern.edu/undergraduate/cours
 
 #### Scrape and Upload Course Catalog
 ```bash
-# Scrape all departments and upload
+# Scrape all departments and upload (with detailed validation summary)
 python -m app.jobs.scrape_catalog
 
 # Scrape specific departments only
@@ -93,7 +93,10 @@ python -m app.jobs.scrape_catalog --limit 5
 
 # Preview upload changes
 python -m app.jobs.scrape_catalog --dry-run
-```
+
+# Only update courses with completely empty catalog data (gap-filling mode)
+python -m app.jobs.scrape_catalog --empty-only
+
 
 #### Upload Catalog from File
 ```bash
@@ -235,8 +238,12 @@ python -m app.jobs.setup_survey_questions --dry-run
 
 2. **Update Requirements, Descriptions, Prerequisites and Maybe Departments** (rarely):
    ```bash
+   # Full catalog update with comprehensive validation
    python -m app.jobs.scrape_catalog
    python -m app.jobs.update_course_departments  # links courses to department
+   
+   # OR gap-filling mode to only update empty courses (safer)
+   python -m app.jobs.scrape_catalog --empty-only
    ```
 
 3. **Process new CTECs** (Every quarter when new CTECs Drop):
@@ -299,6 +306,12 @@ python -m app.jobs.upload_departments --scrape --dry-run
 ```bash
 # Scrape specific departments and upload
 python -m app.jobs.upload_catalog --scrape --departments COMP_SCI,MATH
+
+# Gap-filling mode - only update courses with no catalog data
+python -m app.jobs.scrape_catalog --empty-only --dry-run
+
+# Full validation with limited departments for testing
+python -m app.jobs.scrape_catalog --limit 10 --dry-run
 ```
 
 #### CTEC Jobs
@@ -353,6 +366,15 @@ python -m app.jobs.upload_catalog /custom/path/catalog.json
    ```bash
    # Check file permissions
    chmod +x backend/app/jobs/*.py
+   ```
+
+5. **Catalog Scraping Issues**:
+   ```bash
+   # Check validation summary for failed departments
+   python -m app.jobs.scrape_catalog --limit 5 --dry-run
+   
+   # Use gap-filling mode if unsure about overwriting data
+   python -m app.jobs.scrape_catalog --empty-only --dry-run
    ```
 
 ### Debug Mode

@@ -7,7 +7,7 @@ Orchestrates catalog scraping, validation, and database operations.
 from typing import Dict, List, Set, Any
 from pathlib import Path
 
-from ..db.courses import get_courses_lookup, update_course_descriptions
+from ..db.courses import get_courses_lookup, update_course_descriptions, get_courses_with_empty_catalog_data
 from ..db.requirements import (
     get_requirements_lookup, 
     upsert_requirements_from_names,
@@ -18,7 +18,7 @@ from ..utils.logging import get_job_logger
 from ..settings import settings
 
 
-def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str] = None, limit_departments: int = None) -> Dict:
+def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str] = None, limit_departments: int = None, empty_courses_only: bool = False) -> Dict:
     """
     Complete workflow: scrape course catalog and upload to database.
     
@@ -26,6 +26,7 @@ def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str
         dry_run: If True, preview changes without applying
         department_filter: Optional list of department codes to scrape
         limit_departments: Optional limit on number of departments
+        empty_courses_only: If True, only update courses with completely empty catalog data
         
     Returns:
         Dictionary with operation results
@@ -51,6 +52,9 @@ def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str
         
         logger.info(f"Successfully scraped {len(scraped_data.courses)} courses")
         
+        # Get department scraping results for validation
+        department_results = scraper.get_department_results()
+        
         # Convert to upload format
         catalog_data = [
             {
@@ -71,8 +75,9 @@ def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str
             if not confirm_operation(f"Upload {len(catalog_data)} course updates to database?"):
                 return {'cancelled': True, 'backup_file': str(backup_file)}
         
-        upload_results = update_course_catalog_data(catalog_data, dry_run=dry_run)
+        upload_results = update_course_catalog_data(catalog_data, dry_run=dry_run, empty_courses_only=empty_courses_only)
         upload_results['backup_file'] = str(backup_file)
+        upload_results['department_results'] = department_results
         
         return upload_results
         
@@ -255,13 +260,14 @@ def prepare_course_requirements(matched_data: List[Dict], courses_map: Dict[str,
     }
 
 
-def update_course_catalog_data(catalog_data: List[Dict], dry_run: bool = False) -> Dict[str, Any]:
+def update_course_catalog_data(catalog_data: List[Dict], dry_run: bool = False, empty_courses_only: bool = False) -> Dict[str, Any]:
     """
     Update course catalog data in database (UPDATE ONLY - no inserts).
     
     Args:
         catalog_data: List of course dictionaries from JSON
         dry_run: If True, preview changes without applying
+        empty_courses_only: If True, only update courses with completely empty catalog data
         
     Returns:
         Dictionary with upload results and statistics
@@ -278,7 +284,15 @@ def update_course_catalog_data(catalog_data: List[Dict], dry_run: bool = False) 
     
     # Step 2: Build lookup maps
     logger.info("Building lookup maps")
-    courses_map = get_courses_lookup()
+    if empty_courses_only:
+        logger.info("🔍 EMPTY COURSES ONLY mode - filtering to courses with no catalog data")
+        # Get only courses that have empty catalog data
+        empty_courses = get_courses_with_empty_catalog_data()
+        courses_map = {course['code']: course['id'] for course in empty_courses}
+        logger.info(f"Found {len(courses_map)} courses with empty catalog data")
+    else:
+        courses_map = get_courses_lookup()
+    
     requirements_map = get_requirements_lookup()
     
     # Step 3: Filter to existing courses only

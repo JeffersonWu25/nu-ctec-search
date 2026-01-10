@@ -49,6 +49,48 @@ def get_courses_without_department_id() -> List[Dict]:
         return []
 
 
+def get_courses_with_empty_catalog_data() -> List[Dict]:
+    """
+    Get all courses that have empty catalog data (description, prerequisites, and no requirements).
+    
+    Returns:
+        List of course records with empty catalog data
+    """
+    try:
+        # Get courses with empty or null description AND empty or null prerequisites_text
+        response = supabase.table('courses').select('''
+            id, code, description, prerequisites_text
+        ''').or_(
+            'description.is.null,description.eq.'
+        ).or_(
+            'prerequisites_text.is.null,prerequisites_text.eq.'
+        ).execute()
+        
+        courses = response.data
+        
+        # Further filter to courses with no requirements
+        courses_with_no_requirements = []
+        for course in courses:
+            # Check if course has any requirements
+            req_response = supabase.table('course_requirements').select('id').eq(
+                'course_id', course['id']
+            ).limit(1).execute()
+            
+            # Include if both description and prerequisites are empty AND no requirements
+            desc_empty = not course.get('description') or course['description'].strip() == ''
+            prereq_empty = not course.get('prerequisites_text') or course['prerequisites_text'].strip() == ''
+            no_requirements = len(req_response.data) == 0
+            
+            if desc_empty and prereq_empty and no_requirements:
+                courses_with_no_requirements.append(course)
+        
+        return courses_with_no_requirements
+        
+    except Exception as e:
+        print(f"❌ Failed to fetch courses with empty catalog data: {e}")
+        return []
+
+
 def get_course_by_code(code: str) -> Optional[Dict]:
     """
     Get a single course by its code.
@@ -103,7 +145,7 @@ def update_course_descriptions(course_updates: List[Dict], batch_size: int = 100
         updates=course_updates,
         id_field='id',
         batch_size=batch_size,
-        description='course descriptions'
+        description='course catalog data (descriptions + prerequisites)'
     )
 
 
