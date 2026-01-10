@@ -6,7 +6,7 @@ All Supabase operations for instructors, course_offerings, comments, ratings, et
 
 from typing import Dict, List, Optional
 from ..supabase_client import supabase
-from .batch_helpers import batch_upsert, batch_update, create_lookup_map
+from .batch_helpers import batch_upsert, create_lookup_map
 
 
 # Instructors Table Operations
@@ -140,6 +140,83 @@ def upsert_course_offerings(course_offerings: List[Dict], batch_size: int = 100)
     )
 
 
+def upsert_course_offering_returning_id(offering_data: Dict) -> Optional[str]:
+    """
+    Upsert a single course offering and return its ID.
+    
+    Implements the upsert-returning pattern to reliably get the offering ID
+    without race conditions.
+    
+    Args:
+        offering_data: Course offering record with required fields
+        
+    Returns:
+        UUID string of the course offering ID, or None if operation failed
+    """
+    try:
+        response = supabase.table('course_offerings').upsert(
+            offering_data,
+            on_conflict='course_id,instructor_id,quarter,year,section'
+        ).execute()
+        
+        if response.data and len(response.data) > 0:
+            return response.data[0]['id']
+        else:
+            print(f"❌ Failed to get offering ID after upsert")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Failed to upsert course offering: {e}")
+        return None
+
+
+def clear_offering_snapshot_data(course_offering_id: str) -> Dict:
+    """
+    Delete all snapshot data (comments and ratings) for a course offering.
+    
+    This implements the "replace snapshot" policy for CTEC uploads:
+    - Comments are deleted directly
+    - Ratings are deleted (rating_distributions cascade automatically)
+    
+    Used before inserting fresh CTEC data to ensure clean replacement
+    of all offering-scoped data when the same CTEC is uploaded multiple times.
+    
+    Args:
+        course_offering_id: UUID of the course offering to clear
+        
+    Returns:
+        Dictionary with deletion results: {'comments_deleted', 'ratings_deleted', 'errors'}
+    """
+    results = {
+        'comments_deleted': 0,
+        'ratings_deleted': 0,
+        'errors': []
+    }
+    
+    try:
+        # Delete comments for this offering
+        comment_response = supabase.table('comments').delete().eq(
+            'course_offering_id', course_offering_id
+        ).execute()
+        results['comments_deleted'] = len(comment_response.data) if comment_response.data else 0
+        
+        # Delete ratings for this offering (rating_distributions will cascade)
+        rating_response = supabase.table('ratings').delete().eq(
+            'course_offering_id', course_offering_id
+        ).execute()
+        results['ratings_deleted'] = len(rating_response.data) if rating_response.data else 0
+        
+        print(f"🗑️  Cleared snapshot data for offering {course_offering_id}: "
+              f"{results['comments_deleted']} comments, {results['ratings_deleted']} ratings")
+        
+    except Exception as e:
+        error_msg = f"Failed to clear snapshot data for offering {course_offering_id}: {e}"
+        print(f"❌ {error_msg}")
+        results['errors'].append(error_msg)
+    
+    return results
+
+
 # Survey Questions Table Operations
 
 def get_all_survey_questions() -> List[Dict]:
@@ -227,6 +304,52 @@ def upsert_comments(comments: List[Dict], batch_size: int = 500) -> Dict:
     )
 
 
+def insert_comments(comments: List[Dict], batch_size: int = 500) -> Dict:
+    """
+    Insert comments in batches (for snapshot replacement - no conflict resolution).
+    
+    Used in the "replace snapshot" model where comments are pre-cleared
+    and we need clean insertion without upsert logic.
+    
+    Args:
+        comments: List of comment records with course_offering_id, content, content_hash
+        batch_size: Number of records per batch
+        
+    Returns:
+        Dictionary with insert results: {'total', 'inserted', 'errors'}
+    """
+    results = {
+        'total': len(comments),
+        'inserted': 0,
+        'errors': []
+    }
+    
+    if not comments:
+        return results
+    
+    print(f"📝 Inserting {len(comments)} comments in batches of {batch_size}")
+    
+    for i in range(0, len(comments), batch_size):
+        batch = comments[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
+        total_batches = (len(comments) + batch_size - 1) // batch_size
+        
+        print(f"   Processing batch {batch_num}/{total_batches} ({len(batch)} comments)")
+        
+        try:
+            response = supabase.table('comments').insert(batch).execute()
+            inserted_count = len(response.data) if response.data else len(batch)
+            results['inserted'] += inserted_count
+            print(f"   ✅ Inserted {inserted_count} comments")
+            
+        except Exception as e:
+            error_msg = f"Comment batch {batch_num} failed: {str(e)}"
+            print(f"   ❌ {error_msg}")
+            results['errors'].append(error_msg)
+    
+    return results
+
+
 # Ratings Table Operations
 
 def get_ratings_by_offering(course_offering_id: str) -> List[Dict]:
@@ -265,6 +388,52 @@ def upsert_ratings(ratings: List[Dict], batch_size: int = 100) -> Dict:
         batch_size=batch_size,
         description='ratings'
     )
+
+
+def insert_ratings(ratings: List[Dict], batch_size: int = 100) -> Dict:
+    """
+    Insert ratings in batches (for snapshot replacement - no conflict resolution).
+    
+    Used in the "replace snapshot" model where ratings are pre-cleared
+    and we need clean insertion without upsert logic.
+    
+    Args:
+        ratings: List of rating records with course_offering_id, survey_question_id
+        batch_size: Number of records per batch
+        
+    Returns:
+        Dictionary with insert results: {'total', 'inserted', 'errors'}
+    """
+    results = {
+        'total': len(ratings),
+        'inserted': 0,
+        'errors': []
+    }
+    
+    if not ratings:
+        return results
+    
+    print(f"📊 Inserting {len(ratings)} ratings in batches of {batch_size}")
+    
+    for i in range(0, len(ratings), batch_size):
+        batch = ratings[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
+        total_batches = (len(ratings) + batch_size - 1) // batch_size
+        
+        print(f"   Processing batch {batch_num}/{total_batches} ({len(batch)} ratings)")
+        
+        try:
+            response = supabase.table('ratings').insert(batch).execute()
+            inserted_count = len(response.data) if response.data else len(batch)
+            results['inserted'] += inserted_count
+            print(f"   ✅ Inserted {inserted_count} ratings")
+            
+        except Exception as e:
+            error_msg = f"Rating batch {batch_num} failed: {str(e)}"
+            print(f"   ❌ {error_msg}")
+            results['errors'].append(error_msg)
+    
+    return results
 
 
 # Survey Question Options Table Operations
@@ -345,3 +514,49 @@ def upsert_rating_distributions(distributions: List[Dict], batch_size: int = 500
         batch_size=batch_size,
         description='rating distributions'
     )
+
+
+def insert_rating_distributions(distributions: List[Dict], batch_size: int = 500) -> Dict:
+    """
+    Insert rating distributions in batches (for snapshot replacement - no conflict resolution).
+    
+    Used in the "replace snapshot" model where rating distributions are pre-cleared
+    via cascade delete when ratings are deleted.
+    
+    Args:
+        distributions: List of distribution records with rating_id, option_id, count
+        batch_size: Number of records per batch
+        
+    Returns:
+        Dictionary with insert results: {'total', 'inserted', 'errors'}
+    """
+    results = {
+        'total': len(distributions),
+        'inserted': 0,
+        'errors': []
+    }
+    
+    if not distributions:
+        return results
+    
+    print(f"📈 Inserting {len(distributions)} rating distributions in batches of {batch_size}")
+    
+    for i in range(0, len(distributions), batch_size):
+        batch = distributions[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
+        total_batches = (len(distributions) + batch_size - 1) // batch_size
+        
+        print(f"   Processing batch {batch_num}/{total_batches} ({len(batch)} distributions)")
+        
+        try:
+            response = supabase.table('ratings_distribution').insert(batch).execute()
+            inserted_count = len(response.data) if response.data else len(batch)
+            results['inserted'] += inserted_count
+            print(f"   ✅ Inserted {inserted_count} distributions")
+            
+        except Exception as e:
+            error_msg = f"Distribution batch {batch_num} failed: {str(e)}"
+            print(f"   ❌ {error_msg}")
+            results['errors'].append(error_msg)
+    
+    return results

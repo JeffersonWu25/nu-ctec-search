@@ -7,6 +7,8 @@ Course and Teacher Evaluation (CTEC) PDF documents.
 
 import re
 import os
+import numpy as np
+import cv2
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from pypdf import PdfReader
@@ -607,10 +609,21 @@ class CTECParser:
         Returns:
             OCR text from the page
         """
-        # Use red channel for better OCR accuracy
-        red_channel = page_img.split()[0] if len(page_img.split()) >= 3 else page_img.convert("L")
-        return pytesseract.image_to_string(red_channel, config=r'--oem 3 --psm 3')
-    
+        img = np.array(page_img.convert("RGB"))
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+        # Biggest win: binarize for document OCR
+        bw = cv2.adaptiveThreshold(
+            gray, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31, 11
+        )
+
+        # Biggest win: use document-style segmentation
+        config = "--oem 3 --psm 6 -c preserve_interword_spaces=1"
+        return pytesseract.image_to_string(bw, config=config)
+        
     def _extract_survey_ratings_via_ocr(self, pdf_path: str) -> Dict[str, Dict]:
         """
         Extract survey ratings (questions 1-5) using OCR on pages 2-3.
