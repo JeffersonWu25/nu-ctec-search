@@ -94,7 +94,7 @@ def batch_update(
     description: str = "records"
 ) -> Dict[str, Any]:
     """
-    Update records in batches.
+    Update records in batches with transaction safety.
     
     Args:
         table_name: Name of the target table
@@ -128,14 +128,20 @@ def batch_update(
         print(f"   Processing batch {batch_num}/{total_batches} ({len(batch)} {description})")
         
         try:
+            # Use upsert for atomic batch operations instead of individual updates
+            upsert_data = []
             for update_record in batch:
-                record_id = update_record[id_field]
-                update_data = {k: v for k, v in update_record.items() if k != id_field}
-                
-                supabase.table(table_name).update(update_data).eq(id_field, record_id).execute()
-                results['updated'] += 1
+                upsert_data.append(update_record)
             
-            print(f"   ✅ Updated {len(batch)} {description}")
+            response = supabase.table(table_name).upsert(
+                upsert_data,
+                on_conflict=id_field
+            ).execute()
+            
+            batch_updated = len(response.data) if response.data else len(batch)
+            results['updated'] += batch_updated
+            
+            print(f"   ✅ Updated {batch_updated} {description}")
             
         except Exception as e:
             error_msg = f"Batch {batch_num} failed: {str(e)}"

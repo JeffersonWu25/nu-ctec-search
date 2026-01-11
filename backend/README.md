@@ -175,22 +175,21 @@ These commands intelligently manage AI-generated summaries with automatic stalen
 
 #### Refresh AI Summaries
 ```bash
-# Refresh all stale AI summaries (recommended)
+# Refresh up to 100 stale AI summaries (safe default)
 python -m app.jobs.refresh_ai_summaries
 
 # Preview what summaries need updates
 python -m app.jobs.refresh_ai_summaries --dry-run
 
-# Refresh only course offering summaries
+# Set custom limits to control cost and scope
+python -m app.jobs.refresh_ai_summaries --max-entities 50 --max-cost 5.0
+
+# Refresh only specific entity types
 python -m app.jobs.refresh_ai_summaries --entity-type course_offering
-
-# Refresh only instructor summaries  
-python -m app.jobs.refresh_ai_summaries --entity-type instructor
-
-# Refresh only course summaries
+python -m app.jobs.refresh_ai_summaries --entity-type instructor  
 python -m app.jobs.refresh_ai_summaries --entity-type course
 
-# Force refresh all summaries (ignores staleness)
+# Force refresh all summaries (expensive - ignores staleness)
 python -m app.jobs.refresh_ai_summaries --force
 ```
 
@@ -205,6 +204,14 @@ The system uses intelligent staleness detection:
 1. Course offerings first (based on raw comments)
 2. Instructors second (based on comments across all their offerings) 
 3. Courses last (based on their offering summaries)
+
+**Production Safety Features**:
+- **Cost Protection**: `--max-cost` prevents surprise OpenAI bills
+- **Entity Limits**: `--max-entities` caps processing scope (default: 100)
+- **Retry Logic**: Automatic retry with backoff for API failures
+- **Progress Tracking**: Real-time progress indicators for long jobs
+- **Content Safety**: Auto-truncation prevents token limit errors
+- **Error Resilience**: Robust error handling for malformed data
 
 **Efficiency**: Only entities with actual changes are updated, making the job fast and cost-effective.
 
@@ -251,7 +258,7 @@ python -m app.jobs.setup_survey_questions --dry-run
    python -m app.jobs.upload_ctecs --all --upload-dir /path/to/new/ctecs
    python -m app.jobs.scrape_catalog # adds the descriptions, prerequisites
    python -m app.jobs.update_course_departments  # links courses to department
-   python -m app.jobs.refresh_ai_summaries  # update AI summaries for new data
+   python -m app.jobs.refresh_ai_summaries --max-entities 1000  # update AI summaries safely
    ```
 
 ### Development/Testing
@@ -260,6 +267,7 @@ python -m app.jobs.setup_survey_questions --dry-run
    ```bash
    python -m app.jobs.upload_catalog --dry-run
    python -m app.jobs.refresh_ai_summaries --dry-run
+   python -m app.jobs.update_course_departments --dry-run
    ```
 
 2. **Test with samples**:
@@ -325,11 +333,14 @@ python -m app.jobs.upload_ctecs --all --continue-on-errors --upload-dir /ctecs
 # Check what needs updating without making changes
 python -m app.jobs.refresh_ai_summaries --dry-run
 
+# Safe production batch with cost limits
+python -m app.jobs.refresh_ai_summaries --max-entities 1000
+
 # Refresh specific entity types only
-python -m app.jobs.refresh_ai_summaries --entity-type instructor
+python -m app.jobs.refresh_ai_summaries --entity-type instructor --max-cost 5.0
 
 # Force refresh all regardless of staleness (expensive!)
-python -m app.jobs.refresh_ai_summaries --force
+python -m app.jobs.refresh_ai_summaries --force --max-cost 50.0
 ```
 
 ### Custom File Paths

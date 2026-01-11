@@ -28,7 +28,9 @@ from ..utils.ai_helpers import (
     generate_ai_summary,
     prepare_instructor_content,
     validate_summary,
-    format_staleness_report
+    format_staleness_report,
+    estimate_cost,
+    apply_entity_limits
 )
 from ..utils.logging import get_job_logger
 
@@ -47,9 +49,9 @@ def refresh_course_offering_summaries(stale_offerings: List[Dict], dry_run: bool
         'errors': []
     }
     
-    for offering in stale_offerings:
+    for i, offering in enumerate(stale_offerings, 1):
         offering_id = offering['course_offering_id']
-        logger.info(f"Processing offering {offering_id}")
+        logger.info(f"[{i}/{len(stale_offerings)}] Processing offering {offering_id}")
         
         try:
             # Get comments for this offering
@@ -79,7 +81,14 @@ def refresh_course_offering_summaries(stale_offerings: List[Dict], dry_run: bool
                 continue
             
             # Save summary
-            source_updated_at = datetime.fromisoformat(offering['latest_comment_at'].replace('Z', '+00:00'))
+            try:
+                source_updated_at = datetime.fromisoformat(offering['latest_comment_at'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                error_msg = f"Invalid timestamp for offering {offering_id}: {offering.get('latest_comment_at')}"
+                logger.error(error_msg)
+                results['errors'].append(error_msg)
+                results['failed'] += 1
+                continue
             
             upsert_result = upsert_ai_summary(
                 entity_type='course_offering',
@@ -91,12 +100,13 @@ def refresh_course_offering_summaries(stale_offerings: List[Dict], dry_run: bool
                 source_comment_count=len(comments)
             )
             
-            if upsert_result['success']:
+            if upsert_result and upsert_result.get('success'):
                 logger.info(f"✅ Updated summary for offering {offering_id}")
                 results['successful'] += 1
             else:
-                logger.error(f"❌ Failed to save summary for offering {offering_id}: {upsert_result['error']}")
-                results['errors'].append(f"Save failed for offering {offering_id}")
+                error_detail = upsert_result.get('error', 'Unknown database error') if upsert_result else 'Database operation returned None'
+                logger.error(f"❌ Failed to save summary for offering {offering_id}: {error_detail}")
+                results['errors'].append(f"Save failed for offering {offering_id}: {error_detail}")
                 results['failed'] += 1
                 
         except Exception as e:
@@ -120,9 +130,9 @@ def refresh_instructor_summaries(stale_instructors: List[Dict], dry_run: bool = 
         'errors': []
     }
     
-    for instructor in stale_instructors:
+    for i, instructor in enumerate(stale_instructors, 1):
         instructor_id = instructor['instructor_id']
-        logger.info(f"Processing instructor {instructor_id}")
+        logger.info(f"[{i}/{len(stale_instructors)}] Processing instructor {instructor_id}")
         
         try:
             # Get comments across all offerings for this instructor
@@ -155,7 +165,14 @@ def refresh_instructor_summaries(stale_instructors: List[Dict], dry_run: bool = 
                 continue
             
             # Save summary
-            source_updated_at = datetime.fromisoformat(instructor['latest_comment_at'].replace('Z', '+00:00'))
+            try:
+                source_updated_at = datetime.fromisoformat(instructor['latest_comment_at'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                error_msg = f"Invalid timestamp for instructor {instructor_id}: {instructor.get('latest_comment_at')}"
+                logger.error(error_msg)
+                results['errors'].append(error_msg)
+                results['failed'] += 1
+                continue
             
             upsert_result = upsert_ai_summary(
                 entity_type='instructor',
@@ -167,12 +184,13 @@ def refresh_instructor_summaries(stale_instructors: List[Dict], dry_run: bool = 
                 source_comment_count=len(comments_data)
             )
             
-            if upsert_result['success']:
+            if upsert_result and upsert_result.get('success'):
                 logger.info(f"✅ Updated summary for instructor {instructor_id}")
                 results['successful'] += 1
             else:
-                logger.error(f"❌ Failed to save summary for instructor {instructor_id}: {upsert_result['error']}")
-                results['errors'].append(f"Save failed for instructor {instructor_id}")
+                error_detail = upsert_result.get('error', 'Unknown database error') if upsert_result else 'Database operation returned None'
+                logger.error(f"❌ Failed to save summary for instructor {instructor_id}: {error_detail}")
+                results['errors'].append(f"Save failed for instructor {instructor_id}: {error_detail}")
                 results['failed'] += 1
                 
         except Exception as e:
@@ -196,9 +214,9 @@ def refresh_course_summaries(stale_courses: List[Dict], dry_run: bool = False) -
         'errors': []
     }
     
-    for course in stale_courses:
+    for i, course in enumerate(stale_courses, 1):
         course_id = course['course_id']
-        logger.info(f"Processing course {course_id}")
+        logger.info(f"[{i}/{len(stale_courses)}] Processing course {course_id}")
         
         try:
             # Get offering summaries for this course
@@ -228,7 +246,14 @@ def refresh_course_summaries(stale_courses: List[Dict], dry_run: bool = False) -
                 continue
             
             # Save summary
-            source_updated_at = datetime.fromisoformat(course['latest_offering_summary_at'].replace('Z', '+00:00'))
+            try:
+                source_updated_at = datetime.fromisoformat(course['latest_offering_summary_at'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                error_msg = f"Invalid timestamp for course {course_id}: {course.get('latest_offering_summary_at')}"
+                logger.error(error_msg)
+                results['errors'].append(error_msg)
+                results['failed'] += 1
+                continue
             
             upsert_result = upsert_ai_summary(
                 entity_type='course',
@@ -239,12 +264,13 @@ def refresh_course_summaries(stale_courses: List[Dict], dry_run: bool = False) -
                 source_updated_at=source_updated_at
             )
             
-            if upsert_result['success']:
+            if upsert_result and upsert_result.get('success'):
                 logger.info(f"✅ Updated summary for course {course_id}")
                 results['successful'] += 1
             else:
-                logger.error(f"❌ Failed to save summary for course {course_id}: {upsert_result['error']}")
-                results['errors'].append(f"Save failed for course {course_id}")
+                error_detail = upsert_result.get('error', 'Unknown database error') if upsert_result else 'Database operation returned None'
+                logger.error(f"❌ Failed to save summary for course {course_id}: {error_detail}")
+                results['errors'].append(f"Save failed for course {course_id}: {error_detail}")
                 results['failed'] += 1
                 
         except Exception as e:
@@ -291,8 +317,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m app.jobs.refresh_ai_summaries                      # Refresh all stale summaries
+  python -m app.jobs.refresh_ai_summaries                      # Refresh up to 100 stale summaries
   python -m app.jobs.refresh_ai_summaries --dry-run           # Preview what would be refreshed
+  python -m app.jobs.refresh_ai_summaries --max-entities 500  # Process up to 500 entities
+  python -m app.jobs.refresh_ai_summaries --max-cost 10.0     # Stop if estimated cost exceeds $10
   python -m app.jobs.refresh_ai_summaries --entity-type course_offering  # Only offerings
   python -m app.jobs.refresh_ai_summaries --force             # Force refresh all summaries
         """
@@ -312,6 +340,17 @@ Examples:
         '--force',
         action='store_true',
         help='Force refresh all summaries regardless of staleness'
+    )
+    parser.add_argument(
+        '--max-entities',
+        type=int,
+        default=100,
+        help='Maximum entities to process per run (default: 100)'
+    )
+    parser.add_argument(
+        '--max-cost',
+        type=float,
+        help='Maximum estimated cost in USD (approximate)'
     )
     
     args = parser.parse_args()
@@ -353,9 +392,27 @@ Examples:
         if total_stale == 0:
             print("\n✅ No stale summaries found! All AI summaries are up to date.")
             return
+            
+        # Apply entity limits
+        original_counts = {k: len(v) for k, v in stale_data.items()}
+        if total_stale > args.max_entities:
+            print(f"\n⚠️  Found {total_stale} stale entities, limiting to {args.max_entities}")
+            stale_data = apply_entity_limits(stale_data, args.max_entities)
+            total_stale = sum(len(entities) for entities in stale_data.values())
+        
+        # Estimate and check cost
+        estimated_cost = estimate_cost({k: len(v) for k, v in stale_data.items()})
+        print(f"\n💰 Estimated cost: ${estimated_cost:.2f}")
+        
+        if args.max_cost and estimated_cost > args.max_cost:
+            print(f"❌ Estimated cost ${estimated_cost:.2f} exceeds limit ${args.max_cost:.2f}")
+            print("   Use --max-entities to reduce scope or increase --max-cost")
+            return
         
         if args.dry_run:
             print(f"\n🔍 DRY RUN: Would refresh {total_stale} stale summaries")
+            if any(original_counts[k] != len(v) for k, v in stale_data.items()):
+                print("   Limited entities shown above")
             return
         
         print(f"\n🚀 Starting refresh of {total_stale} stale summaries...")

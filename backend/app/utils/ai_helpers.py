@@ -5,6 +5,8 @@ Provides utilities for processing text for AI summarization tasks.
 """
 
 import re
+import time
+import random
 from typing import List, Dict, Any
 
 from ..core.openai_client import get_openai_client
@@ -102,26 +104,28 @@ def chunk_comments_by_offering(comments_data: List[Dict]) -> List[str]:
 def generate_ai_summary(
     entity_type: str,
     content: List[str],
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-4o-mini",
+    max_retries: int = 3
 ) -> str:
     """
-    Generate AI summary using OpenAI API.
+    Generate AI summary using OpenAI API with retry logic.
 
     Args:
         entity_type: Type of entity ('course_offering', 'instructor', 'course')
         content: List of comments or summaries to analyze
         model: OpenAI model to use
+        max_retries: Maximum number of retry attempts
 
     Returns:
         Generated summary text
 
     Raises:
-        Exception: If OpenAI API call fails
+        Exception: If OpenAI API call fails after all retries
     """
     if not content:
         return f"No data available for {entity_type} summary."
 
-    # Prepare content text based on entity type
+    # Prepare content text based on entity type and validate size
     if entity_type == 'course_offering':
         content_text = '\n\n---\n\n'.join(content)
     elif entity_type == 'instructor':
@@ -130,33 +134,54 @@ def generate_ai_summary(
         content_text = '\n\n---\n\n'.join(content)
     else:
         content_text = '\n\n'.join(content)
+    
+    # Truncate if too large (rough estimate: ~4 chars per token)
+    max_input_chars = 12000  # ~3000 tokens, leave room for prompts and output
+    if len(content_text) > max_input_chars:
+        content_text = content_text[:max_input_chars] + "...\n[Content truncated]"
 
     # Get prompts from centralized prompt file
     system_prompt, user_prompt = get_prompt(entity_type, content_text)
 
-    # Call OpenAI API
+    # Call OpenAI API with retry logic
     client = get_openai_client()
+    last_exception = None
 
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.3,  # Lower temperature for more consistent summaries
-            max_tokens=1000,  # Reasonable limit for summaries
-        )
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more consistent summaries
+                max_tokens=1000,  # Reasonable limit for summaries
+            )
 
-        summary = response.choices[0].message.content.strip()
+            summary = response.choices[0].message.content.strip()
 
-        if not summary:
-            raise Exception("OpenAI returned empty response")
+            if not summary:
+                raise Exception("OpenAI returned empty response")
 
-        return summary
+            return summary
 
-    except Exception as e:
-        raise Exception(f"Failed to generate {entity_type} summary: {str(e)}")
+        except Exception as e:
+            last_exception = e
+            
+            # Check if it's a retryable error
+            error_str = str(e).lower()
+            if any(code in error_str for code in ['429', 'rate limit', 'server error', '5']):
+                if attempt < max_retries:
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(delay)
+                    continue
+            
+            # Non-retryable error or max retries exceeded
+            break
+    
+    raise Exception(f"Failed to generate {entity_type} summary after {max_retries + 1} attempts: {str(last_exception)}")
 
 
 def prepare_instructor_content(comments_data: List[Dict]) -> List[str]:
@@ -258,3 +283,80 @@ def format_staleness_report(stale_data: Dict[str, List[Dict]]) -> str:
     report_lines.append(f"\n📈 Total entities needing updates: {total_stale}")
 
     return '\n'.join(report_lines)
+
+
+def estimate_cost(entity_counts: Dict[str, int], model: str = "gpt-4o-mini") -> float:
+    """
+    Estimate cost for AI summary generation.
+    
+    Args:
+        entity_counts: Dict with entity_type -> count
+        model: OpenAI model name
+    
+    Returns:
+        Estimated cost in USD
+    """
+    # Rough cost estimates per entity (including input + output tokens)
+    costs_per_entity = {
+        "gpt-4o-mini": {
+            'course_offering': 0.005,  # ~1000 input tokens + 500 output tokens
+            'instructor': 0.015,       # ~3000 input tokens + 500 output tokens  
+            'course': 0.008           # ~1500 input tokens + 500 output tokens
+        },
+        "gpt-4o": {
+            'course_offering': 0.03,
+            'instructor': 0.08,
+            'course': 0.05
+        }
+    }
+    
+    model_costs = costs_per_entity.get(model, costs_per_entity["gpt-4o-mini"])
+    
+    total_cost = 0.0
+    for entity_type, count in entity_counts.items():
+        entity_cost = model_costs.get(entity_type, 0.01)  # Default fallback
+        total_cost += count * entity_cost
+    
+    return total_cost
+
+
+def apply_entity_limits(stale_data: Dict[str, List[Dict]], max_entities: int) -> Dict[str, List[Dict]]:
+    """
+    Apply entity count limits across all types proportionally.
+    
+    Args:
+        stale_data: Dict with entity_type -> list of entities
+        max_entities: Maximum total entities to process
+        
+    Returns:
+        Limited stale_data dict
+    """
+    total_entities = sum(len(entities) for entities in stale_data.values())
+    
+    if total_entities <= max_entities:
+        return stale_data
+    
+    # Calculate proportional limits
+    limited_data = {}
+    entities_allocated = 0
+    
+    for entity_type, entities in stale_data.items():
+        if not entities:
+            limited_data[entity_type] = []
+            continue
+            
+        # Calculate proportional share
+        proportion = len(entities) / total_entities
+        type_limit = max(1, int(max_entities * proportion))  # At least 1 if any exist
+        
+        # Don't exceed remaining budget
+        remaining = max_entities - entities_allocated
+        actual_limit = min(type_limit, remaining, len(entities))
+        
+        limited_data[entity_type] = entities[:actual_limit]
+        entities_allocated += actual_limit
+        
+        if entities_allocated >= max_entities:
+            break
+    
+    return limited_data

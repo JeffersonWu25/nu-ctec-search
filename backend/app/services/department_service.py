@@ -30,7 +30,9 @@ def extract_department_code_from_course(course_code: str) -> Optional[str]:
         'AFST_101-7' -> 'AFST'
         'AMER_ST_276-0' -> 'AMER_ST'
         'COMP_SCI_150-0' -> 'COMP_SCI'
-        'ECON_201' -> 'ECON'
+        'POLI_SCI_390-0-20' -> 'POLI_SCI'
+        'PHIL_269-6-01' -> 'PHIL'
+        'SPANISH_410-0-1' -> 'SPANISH'
     
     Args:
         course_code: Full course code from database
@@ -38,28 +40,24 @@ def extract_department_code_from_course(course_code: str) -> Optional[str]:
     Returns:
         Department code or None if unable to extract
     """
+    logger = get_job_logger('extract_department_code')
+    
     if not course_code:
+        logger.warning("Empty course_code provided")
         return None
     
-    # Split on underscore
-    parts = course_code.split('_')
-    
-    if len(parts) < 2:
+    # Extract everything before the last underscore
+    if '_' not in course_code:
+        logger.warning(f"Invalid format (no underscore): {course_code}")
         return None
     
-    # Find the first part that contains a number
-    dept_parts = []
-    for part in parts:
-        # If this part starts with a number, we've found the course number
-        if re.match(r'^\d', part):
-            break
-        dept_parts.append(part)
+    dept_code = course_code.rsplit('_', 1)[0]
     
-    if not dept_parts:
+    if not dept_code:
+        logger.warning(f"Empty department code extracted from: {course_code}")
         return None
     
-    # Join department parts back with underscore
-    return '_'.join(dept_parts)
+    return dept_code
 
 
 def scrape_and_upload_departments(dry_run: bool = False) -> Dict:
@@ -209,7 +207,9 @@ def update_course_department_mappings(dry_run: bool = False, sample_size: Option
         'updated': 0,
         'no_match': 0,
         'extraction_failed': 0,
-        'errors': []
+        'errors': [],
+        'parse_failures': [],
+        'dept_not_found': []
     }
     
     course_updates = []
@@ -223,13 +223,13 @@ def update_course_department_mappings(dry_run: bool = False, sample_size: Option
         
         if not dept_code:
             results['extraction_failed'] += 1
-            logger.warning(f"Failed to extract department from: {course_code}")
+            results['parse_failures'].append(course_code)
             continue
         
         # Look up department ID
         if dept_code not in dept_lookup:
             results['no_match'] += 1
-            logger.warning(f"No department found for code: {dept_code} (from {course_code})")
+            results['dept_not_found'].append(f"{course_code} -> {dept_code}")
             continue
         
         dept_id = dept_lookup[dept_code]
@@ -253,5 +253,20 @@ def update_course_department_mappings(dry_run: bool = False, sample_size: Option
     elif dry_run:
         results['updated'] = len(course_updates)
         logger.info(f"[DRY RUN] Would update {len(course_updates)} courses")
+    
+    # Log summary
+    logger.info("=" * 60)
+    logger.info("📊 UPDATE SUMMARY")
+    logger.info("=" * 60)
+    logger.info(f"Total courses scanned: {results['total_courses']}")
+    logger.info(f"Courses updated: {results['updated']}")
+    logger.info(f"Skipped (department not found): {results['no_match']}")
+    logger.info(f"Skipped (parse failed): {results['extraction_failed']}")
+    
+    # Log example failures
+    if results['parse_failures']:
+        logger.info(f"Example parse failures: {results['parse_failures'][:3]}")
+    if results['dept_not_found']:
+        logger.info(f"Example dept not found: {results['dept_not_found'][:3]}")
     
     return results
