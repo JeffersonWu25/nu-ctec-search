@@ -128,17 +128,21 @@ def batch_update(
         print(f"   Processing batch {batch_num}/{total_batches} ({len(batch)} {description})")
         
         try:
-            # Use upsert for atomic batch operations instead of individual updates
-            upsert_data = []
+            # Use individual UPDATE operations to avoid upsert issues
+            batch_updated = 0
             for update_record in batch:
-                upsert_data.append(update_record)
+                record_id = update_record[id_field]
+                
+                # Extract update fields (exclude the ID field)
+                update_fields = {k: v for k, v in update_record.items() if k != id_field}
+                
+                # Perform UPDATE operation
+                response = supabase.table(table_name).update(update_fields).eq(id_field, record_id).execute()
+                
+                # Count successful updates (Supabase returns updated records)
+                if response.data and len(response.data) > 0:
+                    batch_updated += 1
             
-            response = supabase.table(table_name).upsert(
-                upsert_data,
-                on_conflict=id_field
-            ).execute()
-            
-            batch_updated = len(response.data) if response.data else len(batch)
             results['updated'] += batch_updated
             
             print(f"   ✅ Updated {batch_updated} {description}")

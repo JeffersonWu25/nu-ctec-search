@@ -178,20 +178,24 @@ def upload_ctec_data(ctec_data: CTECData, file_identifier: str = "") -> Dict:
         clear_results = clear_offering_snapshot_data(course_offering_id)
         
         if clear_results['errors']:
-            logger.warning(f"Some data failed to clear: {clear_results['errors']}")
+            return {'error': f'Failed to clear existing data: {clear_results["errors"]}'}
         
-        # Step 5: Insert fresh comments (no deduplication needed - data was cleared)
+        # Step 5: Insert fresh comments (data was cleared, so clean insertion should work)
         comments_inserted = 0
         if ctec_data.comments:
-            comment_data = []
+            # Deduplicate comments by content_hash to handle duplicate content in CTEC
+            unique_comments = {}
             for comment in ctec_data.comments:
-                # Create content hash for potential future deduplication
                 content_hash = hashlib.sha256(comment.encode('utf-8')).hexdigest()
-                comment_data.append({
+                unique_comments[content_hash] = {
                     'course_offering_id': course_offering_id,
                     'content': comment,
                     'content_hash': content_hash
-                })
+                }
+            
+            comment_data = list(unique_comments.values())
+            if len(comment_data) < len(ctec_data.comments):
+                logger.info(f"Deduplicated {len(ctec_data.comments)} comments to {len(comment_data)} unique comments")
             
             comment_results = insert_comments(comment_data)
             comments_inserted = comment_results.get('inserted', 0)

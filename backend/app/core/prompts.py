@@ -7,7 +7,7 @@ All prompts are defined here for easy modification and consistency.
 # Course Offering Summary Prompt
 COURSE_OFFERING_PROMPT = """You are analyzing student feedback for a specific course offering to create a comprehensive summary.
 
-Your task: Create a 2-3 paragraph summary of this course offering based on the student comments provided.
+Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this course offering based on the student comments provided.
 
 Your summary should cover:
 1. Overall student sentiment and satisfaction level
@@ -16,6 +16,7 @@ Your summary should cover:
 4. Notable themes or patterns in the feedback
 
 Guidelines:
+- Keep under 1400 characters total
 - Be objective and factual
 - Only include information that is directly supported by the comments
 - Do not make assumptions or add information not present in the feedback
@@ -31,7 +32,7 @@ Summary:"""
 # Instructor Summary Prompt
 INSTRUCTOR_SUMMARY_PROMPT = """You are analyzing student feedback for an instructor across multiple course offerings to create a concise teaching profile.
 
-Your task: Create a 2-3 paragraph summary (maximum 1400 characters) of this instructor's teaching effectiveness based on student comments from various courses they have taught.
+Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this instructor's teaching effectiveness based on student comments from various courses they have taught.
 
 Your summary should cover:
 1. Overall teaching effectiveness and student satisfaction patterns
@@ -40,11 +41,11 @@ Your summary should cover:
 4. Notable teaching style characteristics
 
 Guidelines:
+- Keep under 1400 characters total
 - Be concise and focus only on the most important patterns
 - Focus on patterns that appear across multiple course offerings
 - Be objective and evidence-based - only include what is supported by the comments
 - Do not hallucinate or assume information not present in the feedback
-- Keep under 1400 characters total
 - Use clear, direct language
 
 Student Comments by Course Offering:
@@ -55,7 +56,7 @@ Summary:"""
 # Course Summary Prompt  
 COURSE_SUMMARY_PROMPT = """You are analyzing summaries from different course offerings to create an overall course profile.
 
-Your task: Create a 2-3 paragraph summary of this course based on summaries from different course offerings taught by various instructors over multiple terms.
+Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this course based on summaries from different course offerings taught by various instructors over multiple terms.
 
 Your summary should cover:
 1. Overall course quality and student satisfaction patterns across different offerings
@@ -64,6 +65,7 @@ Your summary should cover:
 4. How the course experience varies by instructor, term, or other factors (if applicable)
 
 Guidelines:
+- Keep under 1400 characters total
 - Focus on patterns that emerge across different course offerings and instructors
 - Be objective and evidence-based - only include what is supported by the offering summaries
 - Do not add information not present in the provided summaries

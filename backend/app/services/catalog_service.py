@@ -16,6 +16,7 @@ from ..db.requirements import (
 from ..utils.file_helpers import load_json_file, save_json_file, confirm_operation
 from ..utils.logging import get_job_logger
 from ..settings import settings
+from ..supabase_client import supabase
 
 
 def scrape_and_upload_catalog(dry_run: bool = False, department_filter: List[str] = None, limit_departments: int = None, empty_courses_only: bool = False) -> Dict:
@@ -327,10 +328,25 @@ def update_course_catalog_data(catalog_data: List[Dict], dry_run: bool = False, 
     # Step 5: Prepare and update courses (EXISTING ONLY)
     course_updates = prepare_course_updates(matched_data, courses_map)
     
-    if not dry_run:
+    # Validate that all course IDs in updates actually exist in database
+    if course_updates:
+        update_ids = [update['id'] for update in course_updates]
+        response = supabase.table('courses').select('id').in_('id', update_ids).execute()
+        existing_ids = {record['id'] for record in response.data}
+        
+        valid_updates = [u for u in course_updates if u['id'] in existing_ids]
+        skipped_count = len(course_updates) - len(valid_updates)
+        
+        if skipped_count > 0:
+            logger.warning(f"Skipped {skipped_count} course updates with invalid IDs")
+        
+        course_updates = valid_updates
+    
+    if not dry_run and course_updates:
         course_results = update_course_descriptions(course_updates)
     else:
-        logger.info(f"   [DRY RUN] Would update {len(course_updates)} existing courses")
+        if dry_run:
+            logger.info(f"   [DRY RUN] Would update {len(course_updates)} existing courses")
         course_results = {'total': len(course_updates), 'updated': len(course_updates), 'errors': []}
     
     # Step 6: Prepare and update course-requirements (MATCHED COURSES ONLY)

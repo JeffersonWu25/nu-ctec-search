@@ -172,11 +172,12 @@ def upsert_course_offering_returning_id(offering_data: Dict) -> Optional[str]:
 
 def clear_offering_snapshot_data(course_offering_id: str) -> Dict:
     """
-    Delete all snapshot data (comments and ratings) for a course offering.
+    Delete all snapshot data (comments, ratings, and rating_distributions) for a course offering.
     
     This implements the "replace snapshot" policy for CTEC uploads:
     - Comments are deleted directly
     - Ratings are deleted (rating_distributions cascade automatically)
+    - Rating_distributions are also explicitly deleted for safety
     
     Used before inserting fresh CTEC data to ensure clean replacement
     of all offering-scoped data when the same CTEC is uploaded multiple times.
@@ -185,29 +186,54 @@ def clear_offering_snapshot_data(course_offering_id: str) -> Dict:
         course_offering_id: UUID of the course offering to clear
         
     Returns:
-        Dictionary with deletion results: {'comments_deleted', 'ratings_deleted', 'errors'}
+        Dictionary with deletion results: {'comments_deleted', 'ratings_deleted', 'distributions_deleted', 'errors'}
     """
     results = {
         'comments_deleted': 0,
         'ratings_deleted': 0,
+        'distributions_deleted': 0,
         'errors': []
     }
     
     try:
-        # Delete comments for this offering
-        comment_response = supabase.table('comments').delete().eq(
-            'course_offering_id', course_offering_id
-        ).execute()
-        results['comments_deleted'] = len(comment_response.data) if comment_response.data else 0
+        # First, get counts before deletion for accurate reporting
+        comments_before = len(get_comments_by_offering(course_offering_id))
+        ratings_before = len(get_ratings_by_offering(course_offering_id))
         
-        # Delete ratings for this offering (rating_distributions will cascade)
-        rating_response = supabase.table('ratings').delete().eq(
+        # Get distribution count before deletion (via ratings)
+        distributions_before = 0
+        ratings = get_ratings_by_offering(course_offering_id)
+        for rating in ratings:
+            distributions_before += len(get_rating_distributions(rating['id']))
+        
+        # Delete rating distributions first (to avoid foreign key issues)
+        for rating in ratings:
+            supabase.table('ratings_distribution').delete().eq(
+                'rating_id', rating['id']
+            ).execute()
+        
+        # Delete comments for this offering
+        supabase.table('comments').delete().eq(
             'course_offering_id', course_offering_id
         ).execute()
-        results['ratings_deleted'] = len(rating_response.data) if rating_response.data else 0
+        
+        # Delete ratings for this offering
+        supabase.table('ratings').delete().eq(
+            'course_offering_id', course_offering_id
+        ).execute()
+        
+        # Use the counts we obtained before deletion
+        results['comments_deleted'] = comments_before
+        results['ratings_deleted'] = ratings_before
+        results['distributions_deleted'] = distributions_before
         
         print(f"🗑️  Cleared snapshot data for offering {course_offering_id}: "
-              f"{results['comments_deleted']} comments, {results['ratings_deleted']} ratings")
+              f"{results['comments_deleted']} comments, {results['ratings_deleted']} ratings, "
+              f"{results['distributions_deleted']} distributions")
+        
+        # Brief pause to ensure database consistency
+        import time
+        time.sleep(0.1)
         
     except Exception as e:
         error_msg = f"Failed to clear snapshot data for offering {course_offering_id}: {e}"

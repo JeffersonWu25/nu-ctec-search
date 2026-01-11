@@ -212,7 +212,7 @@ def upsert_ai_summary(
     summary_type: str = 'default'
 ) -> Dict:
     """
-    Upsert an AI summary record.
+    Upsert an AI summary record using UPDATE if exists, INSERT if not.
     
     Args:
         entity_type: Type of entity ('course', 'instructor', 'course_offering')
@@ -230,10 +230,10 @@ def upsert_ai_summary(
     logger = get_job_logger('ai_summaries')
     
     try:
+        # Check if summary already exists
+        existing = get_existing_summary(entity_type, entity_id, summary_type)
+        
         data = {
-            'entity_type': entity_type,
-            'entity_id': entity_id,
-            'summary_type': summary_type,
             'summary': summary,
             'model': model,
             'prompt': prompt,
@@ -243,7 +243,22 @@ def upsert_ai_summary(
             'updated_at': datetime.now().isoformat()
         }
         
-        response = supabase.table('ai_summaries').upsert(data).execute()
+        if existing:
+            # Update existing record
+            response = supabase.table('ai_summaries').update(data) \
+                .eq('entity_type', entity_type) \
+                .eq('entity_id', entity_id) \
+                .eq('summary_type', summary_type) \
+                .execute()
+        else:
+            # Insert new record
+            insert_data = {
+                'entity_type': entity_type,
+                'entity_id': entity_id,
+                'summary_type': summary_type,
+                **data
+            }
+            response = supabase.table('ai_summaries').insert(insert_data).execute()
         
         logger.info("Upserted %s summary for %s", entity_type, entity_id)
         return {'success': True, 'data': response.data}
