@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SearchFilters, initialFilters, FilterKey, Option } from '../types/filters';
 
 interface SearchFiltersContextType {
@@ -13,8 +14,32 @@ interface SearchFiltersContextType {
 
 const SearchFiltersContext = createContext<SearchFiltersContextType | undefined>(undefined);
 
+function getInitialFiltersFromParams(searchParams: URLSearchParams): SearchFilters {
+  const courseId = searchParams.get('courseId');
+  const courseName = searchParams.get('courseName');
+  const instructorId = searchParams.get('instructorId');
+  const instructorName = searchParams.get('instructorName');
+
+  const newFilters: SearchFilters = { ...initialFilters };
+
+  if (courseId && courseName) {
+    newFilters.courses = [{ id: courseId, label: decodeURIComponent(courseName) }];
+  }
+
+  if (instructorId && instructorName) {
+    newFilters.instructors = [{ id: instructorId, label: decodeURIComponent(instructorName) }];
+  }
+
+  return newFilters;
+}
+
 export function SearchFiltersProvider({ children }: { children: ReactNode }) {
-  const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+  const searchParams = useSearchParams();
+
+  // Initialize filters from URL params using lazy initialization
+  const [filters, setFilters] = useState<SearchFilters>(() =>
+    getInitialFiltersFromParams(searchParams)
+  );
 
   const updateFilter = useCallback((key: FilterKey, value: Option[]) => {
     setFilters(prev => ({ ...prev, [key]: value }));

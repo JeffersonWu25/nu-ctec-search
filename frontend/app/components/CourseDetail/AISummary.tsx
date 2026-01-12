@@ -1,7 +1,7 @@
 import { SparklesIcon } from '@heroicons/react/24/outline';
 
 interface AISummaryProps {
-  summary?: string;
+  summary?: string | null;
 }
 
 export default function AISummary({ summary }: AISummaryProps) {

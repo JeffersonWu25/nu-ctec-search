@@ -23,12 +23,23 @@ export default function RatingSummary({ ratings }: RatingSummaryProps) {
     r.surveyQuestion.question.includes('challenging you intellectually')
   )?.mean || 0;
 
-  const stimulatingRating = ratings.find(r => 
+  const stimulatingRating = ratings.find(r =>
     r.surveyQuestion.question.includes('stimulating your interest')
   )?.mean || 0;
 
-  // Mock hours per week data (would come from time survey question)
-  const hoursPerWeek = '4 - 7';
+  // Get hours per week from the time survey question
+  const hoursRating = ratings.find(r =>
+    r.surveyQuestion.question.toLowerCase().includes('hours per week')
+  );
+
+  // Find the bin with the highest count and use its label
+  let hoursPerWeek = 'N/A';
+  if (hoursRating && hoursRating.distribution.length > 0) {
+    const maxBin = hoursRating.distribution.reduce((max, curr) =>
+      curr.percentage > max.percentage ? curr : max
+    , hoursRating.distribution[0]);
+    hoursPerWeek = maxBin.label || 'N/A';
+  }
 
   const getRatingColor = (rating: number) => {
     if (rating >= 4.5) return 'text-green-600';

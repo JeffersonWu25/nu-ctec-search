@@ -15,11 +15,18 @@ export interface CourseOffering {
     id: string;
     code: string;
     title: string;
+    description?: string | null;
+    prerequisitesText?: string | null;
+    department?: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
   };
   instructor: {
     id: string;
     name: string;
-    profilePhoto?: string;
+    profile_photo?: string | null;
   };
   quarter: 'Fall' | 'Winter' | 'Spring' | 'Summer';
   year: number;
@@ -29,7 +36,7 @@ export interface CourseOffering {
   ratings: Rating[];
   comments: Comment[];
   requirements: Requirement[];
-  aiSummary?: string;
+  aiSummary?: string | null;
 }
 
 export interface Rating {
@@ -45,6 +52,7 @@ export interface Rating {
 
 export interface RatingDistribution {
   ratingValue: number;
+  label?: string;
   count: number;
   percentage: number;
 }

@@ -2,7 +2,10 @@
 .node_modules
 .next
 docs/samples
+docs/upload
 venv/
 __pycache__/
 .pytest_cache/
 parsed_ctecs.json
+scraped_data/
+CLAUDE.md

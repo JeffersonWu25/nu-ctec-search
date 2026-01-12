@@ -1,6 +1,7 @@
 export interface Option {
   id: string;
   label: string;
+  searchTerms?: string; // Additional terms to match against (e.g., department name)
 }
 
 export interface SearchFilters {

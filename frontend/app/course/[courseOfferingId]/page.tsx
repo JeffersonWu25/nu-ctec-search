@@ -7,30 +7,39 @@ import CourseHeader from '@/app/components/CourseDetail/CourseHeader';
 import AtAGlance from '@/app/components/CourseDetail/AtAGlance';
 import RatingSection from '@/app/components/CourseDetail/RatingSection';
 import StudentComments from '@/app/components/CourseDetail/StudentComments';
-import { mockCourseOffering } from '@/app/data/mockCourseOffering';
 
 export default function CourseDetailPage() {
   const params = useParams();
   const courseOfferingId = params.courseOfferingId as string;
   const [courseOffering, setCourseOffering] = useState<CourseOffering | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCourseOffering = async () => {
       try {
         setLoading(true);
-        // In production, this would be an API call
-        // const response = await fetch(`/api/course-offerings/${courseOfferingId}`);
-        // const data = await response.json();
-        setCourseOffering(mockCourseOffering);
-      } catch (error) {
-        console.error('Error fetching course offering:', error);
+        setError(null);
+
+        const response = await fetch(`/api/course-offerings/${courseOfferingId}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to fetch course offering');
+        }
+
+        setCourseOffering(result.data);
+      } catch (err) {
+        console.error('Error fetching course offering:', err);
+        setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCourseOffering();
+    if (courseOfferingId) {
+      fetchCourseOffering();
+    }
   }, [courseOfferingId]);
 
   if (loading) {
@@ -41,10 +50,10 @@ export default function CourseDetailPage() {
     );
   }
 
-  if (!courseOffering) {
+  if (error || !courseOffering) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-lg text-gray-600">Course not found</div>
+        <div className="text-lg text-gray-600">{error || 'Course not found'}</div>
       </div>
     );
   }
@@ -55,7 +64,7 @@ export default function CourseDetailPage() {
         <CourseHeader courseOffering={courseOffering} />
         <AtAGlance courseOffering={courseOffering} />
         <RatingSection ratings={courseOffering.ratings} />
-        <StudentComments 
+        <StudentComments
           comments={courseOffering.comments}
           courseOfferingId={courseOffering.id}
         />

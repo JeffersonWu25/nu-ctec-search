@@ -27,10 +27,12 @@ export default function CourseInfo({ courseOffering }: CourseInfoProps) {
           </Link>
         </div>
         
-        <div className="flex justify-between items-center py-2 border-b border-neutral-200">
-          <span className="text-neutral-600">School</span>
-          <span className="font-medium text-neutral-900">McCormick</span>
-        </div>
+        {courseOffering.course.department && (
+          <div className="flex justify-between items-center py-2 border-b border-neutral-200">
+            <span className="text-neutral-600">Department</span>
+            <span className="font-medium text-neutral-900">{courseOffering.course.department.name}</span>
+          </div>
+        )}
         
         <div className="flex justify-between items-center py-2 border-b border-neutral-200">
           <span className="text-neutral-600">Term</span>

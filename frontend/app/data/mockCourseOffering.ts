@@ -10,7 +10,7 @@ export const mockCourseOffering: CourseOffering = {
   instructor: {
     id: 'instructor-789',
     name: 'Connor Bain',
-    profilePhoto: undefined
+    profile_photo: undefined
   },
   quarter: 'Fall',
   year: 2023,

@@ -51,14 +51,16 @@ export default function CourseHeader({ courseOffering }: CourseHeaderProps) {
 
         {/* Course Details Tags */}
         <div className="flex flex-wrap gap-3">
-          <div className="bg-secondary-500 rounded-lg px-4 py-2 text-white font-medium text-sm">
-            📚 McCormick
-          </div>
+          {course.department && (
+            <div className="bg-secondary-500 rounded-lg px-4 py-2 text-white font-medium text-sm">
+              {course.department.name}
+            </div>
+          )}
           <div className="bg-green-500 rounded-lg px-4 py-2 text-white font-medium text-sm">
-            📅 {quarter} {year}
+            {quarter} {year}
           </div>
           <div className="bg-orange-500 rounded-lg px-4 py-2 text-white font-medium text-sm">
-            📝 Section {section}
+            Section {section}
           </div>
         </div>
       </div>

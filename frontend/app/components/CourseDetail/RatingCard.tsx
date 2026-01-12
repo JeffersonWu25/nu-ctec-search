@@ -30,14 +30,14 @@ export default function RatingCard({ rating }: RatingCardProps) {
       </div>
 
       <div className="space-y-2">
-        {distribution.map(({ ratingValue, count, percentage }) => (
-          <div key={ratingValue} className="flex items-center space-x-3">
-            <div className="w-8 text-sm font-medium text-neutral-700">
-              {ratingValue}
+        {distribution.map(({ ratingValue, label, count, percentage }, index) => (
+          <div key={label || ratingValue || index} className="flex items-center space-x-3">
+            <div className="w-16 text-sm font-medium text-neutral-700 truncate">
+              {label || ratingValue}
             </div>
             <div className="flex-1 bg-neutral-100 rounded-full h-6 relative overflow-hidden">
-              <div 
-                className={`h-full ${getBarColor(ratingValue)} transition-all duration-300 ease-in-out`}
+              <div
+                className={`h-full ${getBarColor(ratingValue || index + 1)} transition-all duration-300 ease-in-out`}
                 style={{ width: `${(count / maxCount) * 100}%` }}
               />
             </div>

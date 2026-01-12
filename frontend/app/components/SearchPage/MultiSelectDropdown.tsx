@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 interface Option {
   id: string;
   label: string;
+  searchTerms?: string;
 }
 
 interface MultiSelectDropdownProps {
@@ -31,10 +32,14 @@ export default function MultiSelectDropdown({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const filteredOptions = options
-    .filter(option => 
-      !selectedOptions.some(selected => selected.id === option.id) &&
-      option.label.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(option => {
+      if (selectedOptions.some(selected => selected.id === option.id)) {
+        return false;
+      }
+      const searchLower = searchTerm.toLowerCase();
+      const matchText = option.searchTerms || option.label;
+      return matchText.toLowerCase().includes(searchLower);
+    })
     .slice(0, maxResults);
 
   useEffect(() => {
@@ -122,7 +127,7 @@ export default function MultiSelectDropdown({
         </div>
       </div>
 
-      {isOpen && filteredOptions.length > 0 && (
+      {isOpen && searchTerm.length >= 1 && filteredOptions.length > 0 && (
         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
           {filteredOptions.map((option, index) => (
             <button
