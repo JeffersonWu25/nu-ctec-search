@@ -18,7 +18,7 @@ interface StudentCommentsProps {
 
 const COMMENTS_PER_PAGE = 10;
 
-export default function StudentComments({ comments }: StudentCommentsProps) {
+export default function StudentComments({ comments, courseOfferingId }: StudentCommentsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
@@ -55,27 +55,32 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
 
     setIsLoadingAI(true);
     setAiResponse(null);
-    
-    try {
-      // In production, this would be an API call to your RAG service
-      // const response = await fetch('/api/course-comments/search', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ courseOfferingId, question: query })
-      // });
-      // const data = await response.json();
 
-      // Mock AI response for demo
-      setTimeout(() => {
-        setAiResponse({
-          question: query,
-          answer: `Based on student feedback, this course appears to ${query.toLowerCase().includes('difficult') ? 'be moderately challenging but manageable with good support systems' : query.toLowerCase().includes('workload') ? 'have a reasonable workload of 4-7 hours per week outside of class' : query.toLowerCase().includes('professor') || query.toLowerCase().includes('instructor') ? 'have an excellent instructor who is engaging, helpful, and passionate about teaching' : 'provide a good learning experience with strong fundamentals'}. The comments below provide specific details from students who took this course.`,
-          referencedCommentIds: ['comment-1', 'comment-3', 'comment-6', 'comment-9', 'comment-14']
-        });
-        setIsLoadingAI(false);
-      }, 2000);
+    try {
+      const response = await fetch('/api/course-comments/ask-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseOfferingId, question: query })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+      setAiResponse({
+        question: data.question,
+        answer: data.answer,
+        referencedCommentIds: data.referencedCommentIds || []
+      });
     } catch (error) {
       console.error('Error getting AI response:', error);
+      setAiResponse({
+        question: query,
+        answer: 'Sorry, there was an error processing your question. Please try again.',
+        referencedCommentIds: []
+      });
+    } finally {
       setIsLoadingAI(false);
     }
   };
