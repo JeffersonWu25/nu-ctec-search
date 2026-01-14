@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Use embed_rag_chunks.py instead.
+Embed RAG Chunks Job - Generate embeddings for rag_chunks.
 
-Embed Comment Chunks Job - Generate embeddings for comment_chunks.
-
-Finds chunks without embeddings and generates them using OpenAI's API.
-This is the second step in enabling entity-specific RAG for course offerings.
+Finds chunks in rag_chunks without embeddings in rag_embeddings and
+generates them using OpenAI's API.
 
 Usage:
-    python -m app.jobs.embed_comment_chunks [--dry-run] [--batch-size N] [--limit N]
+    python -m app.jobs.embed_rag_chunks [--dry-run] [--batch-size N] [--limit N]
 """
 
 import sys
@@ -18,7 +14,10 @@ import argparse
 import time
 from typing import Dict, List, Any
 
-from ..db.rag import fetch_chunks_without_embeddings, insert_embeddings
+from ..db.unified_rag import (
+    fetch_rag_chunks_without_embeddings,
+    insert_rag_embeddings
+)
 from ..rag.embeddings import generate_embeddings, EMBEDDING_MODEL
 from ..utils.logging import get_job_logger
 
@@ -30,7 +29,7 @@ def process_chunks_in_batches(
     logger
 ) -> Dict[str, Any]:
     """
-    Generate embeddings for chunks in batches.
+    Generate embeddings for rag_chunks in batches.
 
     Args:
         chunks: List of chunk dicts with 'id' and 'content'
@@ -66,12 +65,12 @@ def process_chunks_in_batches(
             continue
 
         try:
-            # Generate embeddings
+            # Generate embeddings via OpenAI
             texts = [chunk['content'] for chunk in batch]
             embeddings = generate_embeddings(texts)
             results['embedded'] += len(embeddings)
 
-            # Prepare records for insert
+            # Prepare records for insert into rag_embeddings
             embedding_records = [
                 {
                     'chunk_id': batch[j]['id'],
@@ -82,14 +81,16 @@ def process_chunks_in_batches(
             ]
 
             # Insert into database
-            insert_result = insert_embeddings(embedding_records, batch_size=batch_size)
+            insert_result = insert_rag_embeddings(embedding_records, batch_size=batch_size)
             results['inserted'] += insert_result['inserted']
 
             if insert_result['errors']:
                 results['errors'].extend(insert_result['errors'])
 
-            logger.info("Batch %d: embedded %d, inserted %d",
-                       batch_num, len(embeddings), insert_result['inserted'])
+            logger.info(
+                "Batch %d: embedded %d, inserted %d",
+                batch_num, len(embeddings), insert_result['inserted']
+            )
 
         except Exception as e:
             error_msg = f"Batch {batch_num}: {e}"
@@ -102,7 +103,7 @@ def process_chunks_in_batches(
 def print_results_summary(results: Dict[str, Any], elapsed_time: float, dry_run: bool):
     """Print job results summary."""
     print("\n" + "=" * 60)
-    print("EMBED COMMENT CHUNKS RESULTS")
+    print("EMBED RAG CHUNKS RESULTS")
     print("=" * 60)
 
     print("\nSummary:")
@@ -131,16 +132,16 @@ def print_results_summary(results: Dict[str, Any], elapsed_time: float, dry_run:
 
 
 def main():
-    """Main entry point for embed comment chunks job."""
+    """Main entry point for embed rag chunks job."""
     parser = argparse.ArgumentParser(
-        description="Generate embeddings for comment_chunks",
+        description="Generate embeddings for rag_chunks into rag_embeddings",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m app.jobs.embed_comment_chunks                  # Embed all unembedded chunks
-  python -m app.jobs.embed_comment_chunks --dry-run        # Preview without API calls
-  python -m app.jobs.embed_comment_chunks --limit 100      # Embed first 100 chunks
-  python -m app.jobs.embed_comment_chunks --batch-size 50  # Use smaller batches
+  python -m app.jobs.embed_rag_chunks                  # Embed all unembedded chunks
+  python -m app.jobs.embed_rag_chunks --dry-run        # Preview without API calls
+  python -m app.jobs.embed_rag_chunks --limit 100      # Embed first 100 chunks
+  python -m app.jobs.embed_rag_chunks --batch-size 50  # Use smaller batches
         """
     )
 
@@ -164,8 +165,8 @@ Examples:
 
     args = parser.parse_args()
 
-    logger = get_job_logger('embed_comment_chunks')
-    logger.info("Embed Comment Chunks Job Starting")
+    logger = get_job_logger('embed_rag_chunks')
+    logger.info("Embed RAG Chunks Job Starting")
 
     if args.dry_run:
         logger.info("DRY RUN MODE - no API calls or DB changes")
@@ -173,13 +174,13 @@ Examples:
     start_time = time.time()
 
     try:
-        # Step 1: Fetch chunks without embeddings
-        logger.info("Fetching chunks without embeddings...")
-        chunks = fetch_chunks_without_embeddings(limit=args.limit)
+        # Step 1: Fetch rag_chunks without embeddings
+        logger.info("Fetching rag_chunks without embeddings...")
+        chunks = fetch_rag_chunks_without_embeddings(limit=args.limit)
         logger.info("Found %d chunks to embed", len(chunks))
 
         if not chunks:
-            print("\nNo chunks need embeddings")
+            print("\nNo rag_chunks need embeddings")
             return
 
         # Step 2: Process in batches

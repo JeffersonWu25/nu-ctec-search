@@ -57,7 +57,7 @@ export default function StudentComments({ comments, courseOfferingId }: StudentC
     setAiResponse(null);
 
     try {
-      const response = await fetch('/api/course-comments/ask-ai', {
+      const response = await fetch('/api/course-comments/ask-ai-unified', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courseOfferingId, question: query })

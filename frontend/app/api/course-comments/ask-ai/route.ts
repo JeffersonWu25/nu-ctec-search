@@ -1,3 +1,9 @@
+/**
+ * DEPRECATED: comment_chunks + embeddings
+ * Superseded by rag_chunks + rag_embeddings.
+ * Use /api/course-comments/ask-ai-unified instead.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { openai, EMBEDDING_MODEL } from '@/app/lib/openai';
