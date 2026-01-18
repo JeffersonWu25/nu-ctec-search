@@ -1,88 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
-
-// Question patterns to identify rating types
-const QUESTION_PATTERNS = {
-  overall: 'overall rating of the course',
-  teaching: 'overall rating of the instruction',
-  learning: 'how much you learned',
-  challenge: 'challenging you intellectually',
-  stimulating: 'stimulating your interest',
-  hours: 'average number of hours per week',
-};
-
-interface RatingDistributionOption {
-  numeric_value: number | null;
-  label: string | null;
-  ordinal: number;
-}
-
-interface RatingDistributionItem {
-  count: number;
-  option: RatingDistributionOption | null;
-}
-
-interface OfferingRatings {
-  overall: number | null;
-  teaching: number | null;
-  hours: string | null;
-}
-
-// Calculate weighted average from distribution
-function calculateWeightedAverage(distribution: RatingDistributionItem[]): number | null {
-  let totalCount = 0;
-  let weightedSum = 0;
-
-  for (const d of distribution) {
-    if (d.option?.numeric_value) {
-      totalCount += d.count;
-      weightedSum += d.count * d.option.numeric_value;
-    }
-  }
-
-  return totalCount > 0 ? Math.round((weightedSum / totalCount) * 100) / 100 : null;
-}
-
-// Find the mode (most common label) from distribution
-function calculateMode(distribution: RatingDistributionItem[]): string | null {
-  let maxCount = 0;
-  let maxLabel: string | null = null;
-
-  for (const d of distribution) {
-    if (d.count > maxCount && d.option?.label) {
-      maxCount = d.count;
-      maxLabel = d.option.label;
-    }
-  }
-
-  return maxLabel;
-}
-
-// Aggregate hours distribution and calculate mode with proper percentage for RatingSummary
-function calculateAggregatedHoursDistribution(distributions: RatingDistributionItem[]) {
-  const labelCounts: Record<string, { count: number; ordinal: number }> = {};
-
-  for (const d of distributions) {
-    if (d.option?.label) {
-      const label = d.option.label;
-      if (!labelCounts[label]) {
-        labelCounts[label] = { count: 0, ordinal: d.option.ordinal };
-      }
-      labelCounts[label].count += d.count;
-    }
-  }
-
-  const totalCount = Object.values(labelCounts).reduce((sum, lc) => sum + lc.count, 0);
-
-  return Object.entries(labelCounts)
-    .sort((a, b) => a[1].ordinal - b[1].ordinal)
-    .map(([label, data]) => ({
-      ratingValue: 0,
-      label,
-      count: data.count,
-      percentage: totalCount > 0 ? (data.count / totalCount) * 100 : 0,
-    }));
-}
+import {
+  RatingDistributionItem,
+  createEmptyAggregatedDistributions,
+  createEmptyOfferingRatings,
+  processRating,
+  buildAggregatedRatings,
+} from '@/app/lib/ratings';
+import type {
+  CourseDetailQueryResult,
+  CourseRequirementJoin,
+  OfferingWithInstructor,
+  RatingQueryResult,
+  InstructorRow,
+} from '@/app/types/api';
 
 export async function GET(
   request: NextRequest,
@@ -114,6 +45,8 @@ export async function GET(
     return NextResponse.json({ error: courseError.message }, { status: 500 });
   }
 
+  const typedCourse = course as unknown as CourseDetailQueryResult;
+
   // Get all course offerings for this course
   const { data: offerings, error: offeringsError } = await supabase
     .from('course_offerings')
@@ -134,6 +67,8 @@ export async function GET(
     return NextResponse.json({ error: offeringsError.message }, { status: 500 });
   }
 
+  const typedOfferings = (offerings || []) as unknown as OfferingWithInstructor[];
+
   // Get AI summary if available
   const { data: aiSummary } = await supabase
     .from('ai_summaries')
@@ -143,19 +78,20 @@ export async function GET(
     .eq('summary_type', 'default')
     .single();
 
-  // If no offerings, return early with empty ratings
-  if (!offerings || offerings.length === 0) {
-    const requirements = (course.course_requirements as unknown as { requirement: { id: string; name: string } }[])
-      ?.map(cr => cr.requirement) || [];
+  // Extract requirements from nested structure
+  const requirements = typedCourse.course_requirements
+    ?.map((cr: CourseRequirementJoin) => cr.requirement) || [];
 
+  // If no offerings, return early with empty ratings
+  if (typedOfferings.length === 0) {
     return NextResponse.json({
       data: {
-        id: course.id,
-        code: course.code,
-        title: course.title,
-        description: course.description,
-        prerequisitesText: course.prerequisites_text,
-        department: course.department,
+        id: typedCourse.id,
+        code: typedCourse.code,
+        title: typedCourse.title,
+        description: typedCourse.description,
+        prerequisitesText: typedCourse.prerequisites_text,
+        department: typedCourse.department,
         requirements,
         offerings: [],
         aggregatedRatings: [],
@@ -165,7 +101,7 @@ export async function GET(
   }
 
   // Get all offering IDs
-  const offeringIds = offerings.map(o => o.id);
+  const offeringIds = typedOfferings.map(o => o.id);
 
   // Fetch ratings for all offerings
   const { data: ratings, error: ratingsError } = await supabase
@@ -192,98 +128,32 @@ export async function GET(
     return NextResponse.json({ error: ratingsError.message }, { status: 500 });
   }
 
+  const typedRatings = (ratings || []) as unknown as RatingQueryResult[];
+
   // Process ratings: per-offering and aggregated
-  const offeringRatingsMap: Record<string, OfferingRatings> = {};
+  const offeringRatingsMap: Record<string, ReturnType<typeof createEmptyOfferingRatings>> = {};
+  const aggregatedDistributions = createEmptyAggregatedDistributions();
 
-  // For aggregated ratings: accumulate distributions by question pattern
-  const aggregatedDistributions: Record<string, RatingDistributionItem[]> = {
-    overall: [],
-    teaching: [],
-    learning: [],
-    challenge: [],
-    stimulating: [],
-    hours: [],
-  };
-
-  for (const rating of ratings || []) {
+  for (const rating of typedRatings) {
     const offeringId = rating.course_offering_id;
-    const question = (rating.survey_question as unknown as { question: string })?.question?.toLowerCase() || '';
+    const question = rating.survey_question?.question || '';
     const distribution = (rating.ratings_distribution || []) as unknown as RatingDistributionItem[];
 
     // Initialize offering ratings if needed
     if (!offeringRatingsMap[offeringId]) {
-      offeringRatingsMap[offeringId] = { overall: null, teaching: null, hours: null };
+      offeringRatingsMap[offeringId] = createEmptyOfferingRatings();
     }
 
-    // Identify question type and process
-    if (question.includes(QUESTION_PATTERNS.overall)) {
-      offeringRatingsMap[offeringId].overall = calculateWeightedAverage(distribution);
-      aggregatedDistributions.overall.push(...distribution);
-    } else if (question.includes(QUESTION_PATTERNS.teaching)) {
-      offeringRatingsMap[offeringId].teaching = calculateWeightedAverage(distribution);
-      aggregatedDistributions.teaching.push(...distribution);
-    } else if (question.includes(QUESTION_PATTERNS.hours)) {
-      offeringRatingsMap[offeringId].hours = calculateMode(distribution);
-      aggregatedDistributions.hours.push(...distribution);
-    } else if (question.includes(QUESTION_PATTERNS.learning)) {
-      aggregatedDistributions.learning.push(...distribution);
-    } else if (question.includes(QUESTION_PATTERNS.challenge)) {
-      aggregatedDistributions.challenge.push(...distribution);
-    } else if (question.includes(QUESTION_PATTERNS.stimulating)) {
-      aggregatedDistributions.stimulating.push(...distribution);
-    }
+    processRating(question, distribution, offeringRatingsMap[offeringId], aggregatedDistributions);
   }
 
-  // Calculate aggregated ratings from combined distributions
-  const aggregatedRatings = [
-    {
-      id: 'agg-teaching',
-      surveyQuestion: { id: 'q-teaching', question: 'Provide an overall rating of the instruction' },
-      distribution: [],
-      mean: calculateWeightedAverage(aggregatedDistributions.teaching) || 0,
-      responseCount: 0,
-    },
-    {
-      id: 'agg-overall',
-      surveyQuestion: { id: 'q-overall', question: 'Provide an overall rating of the course' },
-      distribution: [],
-      mean: calculateWeightedAverage(aggregatedDistributions.overall) || 0,
-      responseCount: 0,
-    },
-    {
-      id: 'agg-learning',
-      surveyQuestion: { id: 'q-learning', question: 'Estimate how much you learned in the course' },
-      distribution: [],
-      mean: calculateWeightedAverage(aggregatedDistributions.learning) || 0,
-      responseCount: 0,
-    },
-    {
-      id: 'agg-challenge',
-      surveyQuestion: { id: 'q-challenge', question: 'Rate the effectiveness of the course in challenging you intellectually' },
-      distribution: [],
-      mean: calculateWeightedAverage(aggregatedDistributions.challenge) || 0,
-      responseCount: 0,
-    },
-    {
-      id: 'agg-stimulating',
-      surveyQuestion: { id: 'q-stimulating', question: 'Rate the effectiveness of the instructor in stimulating your interest in the subject' },
-      distribution: [],
-      mean: calculateWeightedAverage(aggregatedDistributions.stimulating) || 0,
-      responseCount: 0,
-    },
-    {
-      id: 'agg-hours',
-      surveyQuestion: { id: 'q-hours', question: 'Estimate the average number of hours per week you spent on this course outside of class and lab time' },
-      distribution: calculateAggregatedHoursDistribution(aggregatedDistributions.hours),
-      mean: 0,
-      responseCount: 0,
-    },
-  ];
+  // Build aggregated ratings from combined distributions
+  const aggregatedRatings = buildAggregatedRatings(aggregatedDistributions);
 
   // Build offerings with ratings for CourseCard
-  const offeringsWithRatings = offerings.map(offering => {
-    const instructor = offering.instructor as unknown as { id: string; name: string; profile_photo: string | null };
-    const offeringRatings = offeringRatingsMap[offering.id] || { overall: null, teaching: null, hours: null };
+  const offeringsWithRatings = typedOfferings.map(offering => {
+    const instructor = offering.instructor as InstructorRow;
+    const offeringRatings = offeringRatingsMap[offering.id] || createEmptyOfferingRatings();
 
     return {
       id: offering.id,
@@ -298,18 +168,14 @@ export async function GET(
     };
   });
 
-  // Extract requirements from nested structure
-  const requirements = (course.course_requirements as unknown as { requirement: { id: string; name: string } }[])
-    ?.map(cr => cr.requirement) || [];
-
   return NextResponse.json({
     data: {
-      id: course.id,
-      code: course.code,
-      title: course.title,
-      description: course.description,
-      prerequisitesText: course.prerequisites_text,
-      department: course.department,
+      id: typedCourse.id,
+      code: typedCourse.code,
+      title: typedCourse.title,
+      description: typedCourse.description,
+      prerequisitesText: typedCourse.prerequisites_text,
+      department: typedCourse.department,
       requirements,
       offerings: offeringsWithRatings,
       aggregatedRatings,
