@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Use embed_rag_chunks.py instead.
-
 Embed Comment Chunks Job - Generate embeddings for comment_chunks.
 
 Finds chunks without embeddings and generates them using OpenAI's API.

@@ -1,8 +1,4 @@
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Use db/unified_rag.py instead.
-
 Database operations for RAG (Retrieval-Augmented Generation).
 
 Handles comment_chunks and embeddings table operations.

@@ -350,61 +350,6 @@ set
   source_updated_at = coalesce(source_updated_at, generated_at),
   updated_at = coalesce(updated_at, generated_at)
 where source_updated_at is null or updated_at is null;
-
--- Add metadata column to comment_chunks
-alter table comment_chunks
-  add column if not exists metadata jsonb not null default '{}'::jsonb;
-
--- Create GIN index for fast metadata filtering
-create index if not exists idx_comment_chunks_metadata_gin
-  on comment_chunks
-  using gin (metadata);
-
-create table if not exists rag_chunks (
-  id uuid primary key default gen_random_uuid(),
-
-  -- What this chunk belongs to
-  entity_type text not null,         -- 'course_offering' | 'course'
-  entity_id uuid not null,            -- offering_id or course_id
-
-  -- What kind of text this is
-  chunk_type text not null,           -- 'comment' | 'catalog'
-
-  -- The actual text used for RAG
-  content text not null,
-
-  -- Filterable metadata (course_code, year, rating, etc.)
-  metadata jsonb not null default '{}'::jsonb,
-
-  created_at timestamptz not null default now()
-);
-
--- Fast metadata filtering
-create index if not exists idx_rag_chunks_metadata_gin
-  on rag_chunks using gin (metadata);
-
--- Fast filtering by entity
-create index if not exists idx_rag_chunks_entity
-  on rag_chunks (entity_type, entity_id);
-
--- Optional: useful for chunk-type filtering
-create index if not exists idx_rag_chunks_chunk_type
-  on rag_chunks (chunk_type);
-
-create table if not exists rag_embeddings (
-  chunk_id uuid primary key references rag_chunks(id) on delete cascade,
-  embedding vector(1536) not null,
-  model text not null,
-  embedded_at timestamptz not null default now()
-);
-
-create index if not exists idx_rag_embeddings_vector_ivfflat
-on rag_embeddings
-using ivfflat (embedding vector_cosine_ops)
-with (lists = 100);
-
-analyze rag_embeddings;
-
 ```
 
 ## Data Reference

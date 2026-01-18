@@ -1,8 +1,4 @@
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Use rag/unified_retrieval.py instead.
-
 Retrieval functions for RAG.
 
 Computes vector similarity in Python for easy iteration and debugging.

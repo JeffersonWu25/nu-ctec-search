@@ -1,8 +1,4 @@
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Metadata building is now done inline in backfill_rag_chunks_comments.py.
-
 Chunking utilities for RAG operations.
 
 Provides helpers for building metadata dicts and preparing comment chunks.

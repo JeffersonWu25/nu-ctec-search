@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 """
-# DEPRECATED: comment_chunks + embeddings
-# Superseded by rag_chunks + rag_embeddings.
-# Use backfill_rag_chunks_comments.py instead.
-
 Backfill Comment Chunks Job - Populate comment_chunks table from comments.
 
 Creates 1:1 mapping from comments to comment_chunks with metadata for RAG.
