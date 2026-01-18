@@ -10,10 +10,6 @@ import { buildAskAIUserPrompt } from '@/app/lib/prompts';
  * for efficient similarity search, filtering by course_offering_id.
  */
 
-// Minimum similarity score (0-1) for a chunk to be considered relevant.
-// Chunks below this threshold are filtered out.
-const SIMILARITY_THRESHOLD = 0.3;
-
 interface RagChunkResult {
   chunk_id: string;
   content: string;
@@ -99,37 +95,21 @@ export async function POST(request: NextRequest) {
     const queryEmbedding = await generateEmbedding(question);
 
     // 2. Search rag_chunks using indexed Postgres vector search
-    // Fetch more than we need so we can filter by threshold
-    const allChunks = await searchRagChunks(queryEmbedding, courseOfferingId, 16);
-
-    // Debug: log similarity scores to verify semantic search is working
-    console.log(
-      `[ask-ai-unified] Query: "${question.slice(0, 50)}..." | ` +
-      `Chunks found: ${allChunks.length} | ` +
-      `Scores: [${allChunks.map(c => c.similarity.toFixed(3)).join(', ')}]`
-    );
-
-    // 3. Filter chunks by similarity threshold
-    const chunks = allChunks.filter(c => c.similarity >= SIMILARITY_THRESHOLD);
-
-    console.log(
-      `[ask-ai-unified] After threshold (${SIMILARITY_THRESHOLD}): ${chunks.length} chunks`
-    );
+    const chunks = await searchRagChunks(queryEmbedding, courseOfferingId, 8);
 
     if (chunks.length === 0) {
       return NextResponse.json({
         question,
-        answer: 'No relevant comments found for this question. Try rephrasing or asking something more specific about the course.',
+        answer: 'No comments available for this course offering.',
         referencedCommentIds: [],
       });
     }
 
-    // 4. Generate answer using LLM (use top 8 after filtering)
-    const topChunks = chunks.slice(0, 8);
-    const answer = await generateAnswer(question, topChunks);
+    // 3. Generate answer using LLM
+    const answer = await generateAnswer(question, chunks);
 
-    // 5. Extract comment IDs from metadata for citations
-    const referencedCommentIds = topChunks
+    // 4. Extract comment IDs from metadata for citations
+    const referencedCommentIds = chunks
       .map(c => c.metadata?.comment_id)
       .filter((id): id is string => typeof id === 'string');
 

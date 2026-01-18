@@ -26,14 +26,13 @@ export default function StudentComments({ comments, courseOfferingId }: StudentC
 
   // Filter comments based on search query or AI response
   const filteredComments = useMemo(() => {
-    if (aiResponse) {
-      // When AI response is active, show only referenced comments
-      // If no comments were referenced, return empty array (not all comments)
-      return comments.filter(comment =>
+    if (aiResponse && aiResponse.referencedCommentIds.length > 0) {
+      // Show only referenced comments when AI response is active
+      return comments.filter(comment => 
         aiResponse.referencedCommentIds.includes(comment.id)
       );
     }
-
+    
     if (!searchQuery.trim()) return comments;
     return comments.filter(comment =>
       comment.content.toLowerCase().includes(searchQuery.toLowerCase())
@@ -183,9 +182,7 @@ export default function StudentComments({ comments, courseOfferingId }: StudentC
         {filteredComments.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-neutral-500">
-              {aiResponse
-                ? 'No relevant comments found for this question. The AI could not find comments that match your query.'
-                : 'No comments available.'}
+              {aiResponse ? 'No referenced comments to display.' : 'No comments available.'}
             </div>
           </div>
         ) : (
