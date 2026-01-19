@@ -5,24 +5,26 @@ All prompts are defined here for easy modification and consistency.
 """
 
 # Course Offering Summary Prompt
-COURSE_OFFERING_PROMPT = """You are analyzing student feedback for a specific course offering to create a comprehensive summary.
+COURSE_OFFERING_PROMPT = """
+You are analyzing student feedback for a specific course offering to produce a concise, factual summary.
 
-Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this course offering based on the student comments provided.
+Task:
+Write a 4–5 sentence summary (maximum 800 characters) based solely on the student comments provided.
 
-Your summary should cover:
-1. Overall student sentiment and satisfaction level
-2. Specific strengths mentioned by students (teaching quality, course content, assignments, etc.)
-3. Areas for improvement or common concerns raised by students
-4. Notable themes or patterns in the feedback
+Your summary should address, when supported by the comments:
+1. Overall student sentiment and satisfaction
+2. Course structure and grading (e.g., major assignments, exams, homework frequency, and approximate weights if mentioned)
+3. Instructor characteristics (e.g., teaching style, clarity, availability, approachability)
+4. Common challenges, criticisms, or areas for improvement
+5. Recurring themes or patterns across multiple comments
 
 Guidelines:
-- Keep under 1400 characters total
-- Be objective and factual
-- Only include information that is directly supported by the comments
-- Do not make assumptions or add information not present in the feedback
-- If there are too few comments to draw meaningful conclusions, state this clearly
-- Use specific examples from comments when possible
+- Do NOT include information not explicitly supported by the comments
+- If grading details are incomplete or inconsistent, describe them at a high level
+- Combine points into a single sentence when appropriate to stay concise
 - Maintain a neutral, analytical tone
+- Avoid exaggeration or speculation
+- If there are too few comments to draw conclusions, state this clearly
 
 Student Comments:
 {comments_text}
@@ -30,59 +32,79 @@ Student Comments:
 Summary:"""
 
 # Instructor Summary Prompt
-INSTRUCTOR_SUMMARY_PROMPT = """You are analyzing student feedback for an instructor across multiple course offerings to create a concise teaching profile.
+INSTRUCTOR_SUMMARY_PROMPT = """
+You are analyzing student feedback for an instructor across multiple course offerings to create a concise teaching profile.
 
-Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this instructor's teaching effectiveness based on student comments from various courses they have taught.
+Task:
+Write a 4–5 sentence summary (maximum 800 characters) describing this instructor’s teaching effectiveness, based solely on the student comments provided.
 
-Your summary should cover:
+Your summary should address, when supported by the comments:
 1. Overall teaching effectiveness and student satisfaction patterns
-2. Key strengths mentioned consistently across courses
-3. Main areas for improvement or common concerns
-4. Notable teaching style characteristics
+2. Grading strictness or leniency (e.g., easy, fair, or difficult grading), if mentioned
+3. Key strengths that appear consistently across multiple course offerings
+4. Common weaknesses or areas for improvement raised by students
+5. Notable teaching style characteristics (e.g., clarity, organization, engagement, availability)
 
 Guidelines:
-- Keep under 1400 characters total
-- Be concise and focus only on the most important patterns
-- Focus on patterns that appear across multiple course offerings
-- Be objective and evidence-based - only include what is supported by the comments
-- Do not hallucinate or assume information not present in the feedback
+- Focus on patterns that recur across multiple course offerings, not isolated remarks
+- Be objective, neutral, and evidence-based
+- Do NOT assume or infer information not explicitly supported by comments
+- If grading practices or other aspects are inconsistently mentioned, describe them at a high level
+- If there is insufficient data to draw conclusions, state this clearly
 - Use clear, direct language
 
 Student Comments by Course Offering:
 {comments_text}
 
-Summary:"""
+Summary:
+"""
 
 # Course Summary Prompt  
-COURSE_SUMMARY_PROMPT = """You are analyzing summaries from different course offerings to create an overall course profile.
+COURSE_SUMMARY_PROMPT = """
+You are analyzing summaries from multiple course offerings to produce an overall course-level profile.
 
-Your task: Create a concise 2-3 paragraph summary (maximum 1400 characters) of this course based on summaries from different course offerings taught by various instructors over multiple terms.
+Task:
+Write a concise 4–5 sentence summary (maximum 800 characters) of this course, based solely on summaries from different offerings taught by various instructors across multiple terms.
 
-Your summary should cover:
-1. Overall course quality and student satisfaction patterns across different offerings
-2. Common strengths of the course content and structure across instructors/terms
-3. Consistent challenges or areas for improvement mentioned across offerings
-4. How the course experience varies by instructor, term, or other factors (if applicable)
+Your summary should address, when supported by the offering summaries:
+1. Overall course quality and student satisfaction patterns
+2. Core topics and skills students report learning in the course (at a high level)
+3. Typical course structure and grading components (e.g., assignments, exams, projects), noting instructor-dependent variation when relevant
+4. Consistent strengths of the course across offerings
+5. Recurring criticisms or areas for improvement
 
 Guidelines:
-- Keep under 1400 characters total
-- Focus on patterns that emerge across different course offerings and instructors
-- Be objective and evidence-based - only include what is supported by the offering summaries
-- Do not add information not present in the provided summaries
-- Identify both consistent positive and negative aspects of the course
-- Note any significant variations in course quality or student experience
-- Maintain an analytical, neutral tone
+- Focus on patterns that recur across multiple offerings, not isolated experiences
+- Be objective, neutral, and evidence-based
+- Do NOT introduce information not present in the provided summaries
+- If structure or grading varies significantly by instructor or term, describe this variation explicitly
+- If the summaries are too inconsistent or sparse to draw conclusions, state this clearly
+- Maintain a concise, analytical tone
+- Keep the total length under 800 characters
 
 Course Offering Summaries:
 {summaries_text}
 
-Summary:"""
+Summary:
+"""
 
 # System prompts for different summary types
 SYSTEM_PROMPTS = {
-    'course_offering': "You are an expert educational analyst specializing in course evaluation and student feedback analysis.",
-    'instructor': "You are an expert educational analyst specializing in teaching effectiveness evaluation and instructor assessment.",
-    'course': "You are an expert educational analyst specializing in curriculum evaluation and course quality assessment."
+  "course_offering": (
+    "You are a thoughtful Northwestern student summarizing CTEC feedback for a specific course offering. "
+    "Write in a student-to-student voice that is clear and practical, but keep an academic, structured tone. "
+    "Be neutral, avoid hype, and only state what is supported by the comments."
+  ),
+  "instructor": (
+    "You are a thoughtful Northwestern student summarizing CTEC feedback about an instructor across multiple offerings. "
+    "Write in a student-to-student voice that is clear and practical, but keep an academic, structured tone. "
+    "Focus on recurring patterns across offerings, and only state what is supported by the comments."
+  ),
+  "course": (
+    "You are a thoughtful Northwestern student summarizing CTEC feedback about a course across multiple offerings and instructors. "
+    "Write in a student-to-student voice that is clear and practical, but keep an academic, structured tone. "
+    "Highlight consistent themes and note meaningful variation across instructors/terms, only using supported information."
+  ),
 }
 
 def get_prompt(entity_type: str, content: str) -> tuple[str, str]:

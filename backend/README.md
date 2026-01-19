@@ -343,6 +343,18 @@ python -m app.jobs.refresh_ai_summaries --entity-type instructor --max-cost 5.0
 python -m app.jobs.refresh_ai_summaries --force --max-cost 50.0
 ```
 
+#### Create new comment embeddings
+```bash
+# Preview what would be processed
+python -m app.jobs.populate_comment_embeddings --dry-run
+
+# Process all new comments
+python -m app.jobs.populate_comment_embeddings
+
+# Limit to 500 comments, smaller batch sizes, max cost params
+python -m app.jobs.populate_comment_embeddings --limit 500 --batch-size 50 --max-cost 1.0
+```
+
 ### Custom File Paths
 ```bash
 # Use custom data files
