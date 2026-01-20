@@ -18,21 +18,22 @@ interface StudentCommentsProps {
 
 const COMMENTS_PER_PAGE = 10;
 
-export default function StudentComments({ comments }: StudentCommentsProps) {
+export default function StudentComments({ comments, courseOfferingId }: StudentCommentsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Filter comments based on search query or AI response
   const filteredComments = useMemo(() => {
-    if (aiResponse && aiResponse.referencedCommentIds.length > 0) {
-      // Show only referenced comments when AI response is active
-      return comments.filter(comment => 
+    if (aiResponse) {
+      // Show only referenced comments when AI response is active (may be 0)
+      return comments.filter(comment =>
         aiResponse.referencedCommentIds.includes(comment.id)
       );
     }
-    
+
     if (!searchQuery.trim()) return comments;
     return comments.filter(comment =>
       comment.content.toLowerCase().includes(searchQuery.toLowerCase())
@@ -55,27 +56,30 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
 
     setIsLoadingAI(true);
     setAiResponse(null);
-    
-    try {
-      // In production, this would be an API call to your RAG service
-      // const response = await fetch('/api/course-comments/search', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ courseOfferingId, question: query })
-      // });
-      // const data = await response.json();
+    setAiError(null);
 
-      // Mock AI response for demo
-      setTimeout(() => {
-        setAiResponse({
-          question: query,
-          answer: `Based on student feedback, this course appears to ${query.toLowerCase().includes('difficult') ? 'be moderately challenging but manageable with good support systems' : query.toLowerCase().includes('workload') ? 'have a reasonable workload of 4-7 hours per week outside of class' : query.toLowerCase().includes('professor') || query.toLowerCase().includes('instructor') ? 'have an excellent instructor who is engaging, helpful, and passionate about teaching' : 'provide a good learning experience with strong fundamentals'}. The comments below provide specific details from students who took this course.`,
-          referencedCommentIds: ['comment-1', 'comment-3', 'comment-6', 'comment-9', 'comment-14']
-        });
-        setIsLoadingAI(false);
-      }, 2000);
+    try {
+      const response = await fetch(`/api/course-offerings/${courseOfferingId}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: query })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to get AI response');
+      }
+
+      setAiResponse({
+        question: result.data.question,
+        answer: result.data.answer,
+        referencedCommentIds: result.data.referencedCommentIds
+      });
     } catch (error) {
       console.error('Error getting AI response:', error);
+      setAiError(error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
       setIsLoadingAI(false);
     }
   };
@@ -90,6 +94,7 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
     setSearchQuery('');
     setSearchInput('');
     setAiResponse(null);
+    setAiError(null);
   };
 
   return (
@@ -118,7 +123,7 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
           >
             {isLoadingAI ? 'Searching...' : 'Ask AI'}
           </button>
-          {(aiResponse || searchQuery) && (
+          {(aiResponse || aiError || searchQuery) && (
             <button
               onClick={clearSearch}
               className="px-4 py-3 bg-neutral-100 text-neutral-700 font-medium rounded-lg hover:bg-neutral-200 transition-colors"
@@ -142,6 +147,18 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
           </div>
         )}
 
+        {aiError && !isLoadingAI && (
+          <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+            <div className="flex items-center space-x-2 mb-2">
+              <svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="font-semibold text-red-900">Unable to get AI response</h3>
+            </div>
+            <p className="text-sm text-red-700">{aiError}</p>
+          </div>
+        )}
+
         {aiResponse && !isLoadingAI && (
           <div className="border border-primary-200 rounded-lg p-4 bg-primary-50">
             <div className="flex items-center space-x-2 mb-3">
@@ -157,7 +174,9 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
               </p>
             </div>
             <div className="text-xs text-primary-600">
-              Based on {aiResponse.referencedCommentIds.length} student comments
+              {aiResponse.referencedCommentIds.length > 0
+                ? `Based on ${aiResponse.referencedCommentIds.length} student comment${aiResponse.referencedCommentIds.length === 1 ? '' : 's'}`
+                : 'No directly relevant comments found'}
             </div>
           </div>
         )}
@@ -175,10 +194,14 @@ export default function StudentComments({ comments }: StudentCommentsProps) {
         </div>
 
         {filteredComments.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-neutral-500">
-              {aiResponse ? 'No referenced comments to display.' : 'No comments available.'}
-            </div>
+          <div className={`text-center py-6 rounded-lg ${aiResponse ? 'bg-primary-50 border border-primary-200' : 'bg-neutral-50'}`}>
+            {aiResponse ? (
+              <p className="text-sm text-primary-600">
+                No comments were similar enough to your question to be cited.
+              </p>
+            ) : (
+              <p className="text-sm text-neutral-500">No comments available.</p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
