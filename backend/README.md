@@ -355,6 +355,16 @@ python -m app.jobs.populate_comment_embeddings
 python -m app.jobs.populate_comment_embeddings --limit 500 --batch-size 50 --max-cost 1.0
 ```
 
+#### Populate/update course_metrics table
+
+```bash
+# Test run
+python -m app.jobs.populate_course_metrics --dry-run
+
+# To run for real:
+python -m app.jobs.populate_course_metrics
+```
+
 ### Custom File Paths
 ```bash
 # Use custom data files
