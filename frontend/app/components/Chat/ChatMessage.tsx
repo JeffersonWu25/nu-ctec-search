@@ -12,7 +12,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
     if (!message.cards || message.cards.length === 0) return null;
 
     return (
-      <div className="flex gap-3 mt-3 flex-wrap">
+      <div className="flex flex-col gap-3 mt-3">
         {message.cards.map((card, index) => {
           switch (message.cardType) {
             case 'course':
@@ -23,6 +23,11 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                   courseName={card.courseName}
                   courseCode={card.courseCode}
                   description={card.description}
+                  courseRating={card.courseRating}
+                  instructionRating={card.instructionRating}
+                  hoursPerWeek={card.hoursPerWeek}
+                  similarityScore={card.similarityScore}
+                  matchingSnippets={card.matchingSnippets}
                 />
               );
             case 'professor':

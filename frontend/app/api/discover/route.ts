@@ -10,13 +10,13 @@ import {
 } from '@/app/types/discover';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
-const CHUNK_SIMILARITY_THRESHOLD = 0.6;
-const COURSE_SCORE_THRESHOLD = 0.65;
-const MAX_CHUNKS = 80;
+const CHUNK_SIMILARITY_THRESHOLD = 0.45;
+const COURSE_SCORE_THRESHOLD = 0.5;
+const MAX_CHUNKS = 100;
 const MAX_CANDIDATES = 500;
 const TOP_COURSES_WITH_QUERY = 3;
-const TOP_COURSES_NO_QUERY = 20;
-const TOP_CHUNKS_PER_COURSE = 3;
+const TOP_COURSES_NO_QUERY = 0;
+const TOP_CHUNKS_PER_COURSE = 5;
 
 interface SimilarChunk {
   chunk_id: string;
@@ -279,12 +279,12 @@ async function getCandidateCourses(filters: {
 
   // If requirement_ids filter is present, we need to filter by requirements
   let candidateIds = data.map((row) => {
-    const course = row.courses as { id: string };
+    const course = row.courses as unknown as { id: string };
     return course.id;
   });
 
   if (requirement_ids && requirement_ids.length > 0) {
-    // Get courses that have ALL the specified requirements
+    // Get courses that have ALL of the specified requirements (AND logic)
     const { data: reqData, error: reqError } = await supabase
       .from('course_requirements')
       .select('course_id')
@@ -294,15 +294,15 @@ async function getCandidateCourses(filters: {
     if (reqError) {
       console.error('Requirement filter error:', reqError);
     } else if (reqData) {
-      // Count how many requirements each course has
-      const courseReqCounts = new Map<string, number>();
+      // Count how many of the selected requirements each course has
+      const courseReqCount = new Map<string, number>();
       for (const row of reqData) {
-        const count = courseReqCounts.get(row.course_id) || 0;
-        courseReqCounts.set(row.course_id, count + 1);
+        courseReqCount.set(row.course_id, (courseReqCount.get(row.course_id) || 0) + 1);
       }
-
-      // Keep only courses that have at least one of the requirements
-      candidateIds = candidateIds.filter((id) => courseReqCounts.has(id));
+      // Keep only courses that have ALL selected requirements
+      candidateIds = candidateIds.filter(
+        (id) => courseReqCount.get(id) === requirement_ids.length
+      );
     }
   }
 
@@ -311,11 +311,11 @@ async function getCandidateCourses(filters: {
 
   const candidates: CandidateCourse[] = data
     .filter((row) => {
-      const course = row.courses as { id: string };
+      const course = row.courses as unknown as { id: string };
       return candidateIdSet.has(course.id);
     })
     .map((row) => {
-      const course = row.courses as {
+      const course = row.courses as unknown as {
         id: string;
         code: string;
         title: string;
