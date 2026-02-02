@@ -1,78 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/app/lib/supabase';
+import { handleApiError, handleSupabaseError } from '@/app/lib/errors';
+import { DEFAULT_PAGE_LIMIT } from '@/app/lib/config';
+import { validatePagination } from '@/app/lib/validation';
+import * as offeringRepo from '@/app/lib/repositories/offeringRepo';
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
+  try {
+    const searchParams = request.nextUrl.searchParams;
 
-  // Filter params
-  const courseId = searchParams.get('courseId');
-  const instructorId = searchParams.get('instructorId');
-  const departmentId = searchParams.get('departmentId');
-  const quarter = searchParams.get('quarter');
-  const year = searchParams.get('year');
-  // TODO: Implement requirement filtering (requires join through course_requirements)
-  // TODO: Implement text search across course code/title
+    // Filter params
+    const courseId = searchParams.get('courseId') || undefined;
+    const instructorId = searchParams.get('instructorId') || undefined;
+    const departmentId = searchParams.get('departmentId') || undefined;
+    const quarter = searchParams.get('quarter') || undefined;
+    const yearParam = searchParams.get('year');
+    const year = yearParam ? parseInt(yearParam) : undefined;
 
-  // Pagination
-  const limit = parseInt(searchParams.get('limit') || '20');
-  const offset = parseInt(searchParams.get('offset') || '0');
+    // Pagination
+    const { limit, offset } = validatePagination(
+      searchParams.get('limit'),
+      searchParams.get('offset'),
+      { limit: DEFAULT_PAGE_LIMIT, offset: 0 },
+    );
 
-  // Sorting
-  const sortBy = searchParams.get('sortBy') || 'year';
-  const sortOrder = searchParams.get('sortOrder') === 'asc' ? true : false;
+    // Sorting
+    const sortBy = searchParams.get('sortBy') || 'year';
+    const ascending = searchParams.get('sortOrder') === 'asc';
 
-  let query = supabase
-    .from('course_offerings')
-    .select(`
-      id,
-      quarter,
-      year,
-      section,
-      audience_size,
-      response_count,
-      course:courses(
-        id,
-        code,
-        title,
-        department:departments(id, code, name)
-      ),
-      instructor:instructors(id, name, profile_photo)
-    `, { count: 'exact' })
-    .range(offset, offset + limit - 1);
+    const { data, error, count } = await offeringRepo.getAll(
+      { courseId, instructorId, departmentId, quarter, year },
+      { sortBy, ascending },
+      { limit, offset }
+    );
 
-  // Apply filters
-  if (courseId) {
-    query = query.eq('course_id', courseId);
+    if (error) handleSupabaseError(error);
+
+    return NextResponse.json({ data, count, limit, offset });
+  } catch (error) {
+    return handleApiError(error);
   }
-  if (instructorId) {
-    query = query.eq('instructor_id', instructorId);
-  }
-  if (quarter) {
-    query = query.eq('quarter', quarter);
-  }
-  if (year) {
-    query = query.eq('year', parseInt(year));
-  }
-
-  // Filter by department (requires join)
-  if (departmentId) {
-    query = query.eq('course.department_id', departmentId);
-  }
-
-  // Apply sorting
-  if (sortBy === 'year') {
-    query = query.order('year', { ascending: sortOrder }).order('quarter', { ascending: sortOrder });
-  } else if (sortBy === 'course') {
-    query = query.order('course(code)', { ascending: sortOrder });
-  } else if (sortBy === 'instructor') {
-    query = query.order('instructor(name)', { ascending: sortOrder });
-  }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ data, count, limit, offset });
 }

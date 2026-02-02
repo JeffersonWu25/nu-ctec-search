@@ -68,7 +68,7 @@ export default function StudentComments({ comments, courseOfferingId }: StudentC
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to get AI response');
+        throw new Error(result.error?.message || result.error || 'Failed to get AI response');
       }
 
       setAiResponse({

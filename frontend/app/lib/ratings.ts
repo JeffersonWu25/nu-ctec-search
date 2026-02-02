@@ -216,3 +216,44 @@ export function buildAggregatedRatings(
 export function createEmptyOfferingRatings(): OfferingRatings {
   return { overall: null, teaching: null, hours: null };
 }
+
+// --- Batch processing for services ---
+
+/** Minimal shape required by processOfferingsRatings. */
+export interface RatingRecord {
+  course_offering_id: string;
+  survey_question: { question: string } | null;
+  ratings_distribution: RatingDistributionItem[];
+}
+
+/**
+ * Process ratings for multiple offerings in one pass.
+ * Returns per-offering ratings and cross-offering aggregated ratings.
+ *
+ * Pure logic — no repo dependency. Services fetch data and pass it here.
+ * Deduplicates the identical loops in courseService and instructorService.
+ */
+export function processOfferingsRatings(ratings: RatingRecord[]): {
+  offeringRatingsMap: Record<string, OfferingRatings>;
+  aggregatedRatings: AggregatedRating[];
+} {
+  const offeringRatingsMap: Record<string, OfferingRatings> = {};
+  const aggregatedDistributions = createEmptyAggregatedDistributions();
+
+  for (const rating of ratings) {
+    const offeringId = rating.course_offering_id;
+    const question = rating.survey_question?.question ?? '';
+    const distribution = rating.ratings_distribution ?? [];
+
+    if (!offeringRatingsMap[offeringId]) {
+      offeringRatingsMap[offeringId] = createEmptyOfferingRatings();
+    }
+
+    processRating(question, distribution, offeringRatingsMap[offeringId], aggregatedDistributions);
+  }
+
+  return {
+    offeringRatingsMap,
+    aggregatedRatings: buildAggregatedRatings(aggregatedDistributions),
+  };
+}

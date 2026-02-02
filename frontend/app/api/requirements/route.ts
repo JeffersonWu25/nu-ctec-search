@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/app/lib/supabase';
+import { handleApiError, handleSupabaseError } from '@/app/lib/errors';
+import * as requirementRepo from '@/app/lib/repositories/requirementRepo';
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from('requirements')
-    .select('id, name')
-    .order('name', { ascending: true });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const { data, error } = await requirementRepo.getAll();
+    if (error) handleSupabaseError(error);
+    return NextResponse.json({ data });
+  } catch (error) {
+    return handleApiError(error);
   }
-
-  return NextResponse.json({ data });
 }

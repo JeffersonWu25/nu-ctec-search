@@ -25,7 +25,7 @@ export default function CourseDetailPage() {
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'Failed to fetch course offering');
+          throw new Error(result.error?.message || result.error || 'Failed to fetch course offering');
         }
 
         setCourseOffering(result.data);

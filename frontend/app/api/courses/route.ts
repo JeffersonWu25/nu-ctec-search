@@ -1,34 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/app/lib/supabase';
+import { handleApiError, handleSupabaseError } from '@/app/lib/errors';
+import { DEFAULT_LIST_LIMIT } from '@/app/lib/config';
+import { validatePagination } from '@/app/lib/validation';
+import * as courseRepo from '@/app/lib/repositories/courseRepo';
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const departmentId = searchParams.get('departmentId');
-  const limit = parseInt(searchParams.get('limit') || '50');
-  const offset = parseInt(searchParams.get('offset') || '0');
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const departmentId = searchParams.get('departmentId') || undefined;
 
-  let query = supabase
-    .from('courses')
-    .select(`
-      id,
-      code,
-      title,
-      description,
-      prerequisites_text,
-      department:departments(id, code, name)
-    `)
-    .order('code', { ascending: true })
-    .range(offset, offset + limit - 1);
+    const { limit, offset } = validatePagination(
+      searchParams.get('limit'),
+      searchParams.get('offset'),
+      { limit: DEFAULT_LIST_LIMIT, offset: 0 },
+    );
 
-  if (departmentId) {
-    query = query.eq('department_id', departmentId);
+    const { data, error, count } = await courseRepo.getAll({ departmentId, limit, offset });
+    if (error) handleSupabaseError(error);
+
+    return NextResponse.json({ data, count });
+  } catch (error) {
+    return handleApiError(error);
   }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ data, count });
 }
