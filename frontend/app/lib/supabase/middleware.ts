@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getSupabaseEnv } from '@/app/lib/supabase/env';
 
 type MiddlewareClient = {
   supabase: SupabaseClient;
@@ -8,16 +9,15 @@ type MiddlewareClient = {
 };
 
 export function createClient(request: NextRequest): MiddlewareClient | null {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { url, anonKey } = getSupabaseEnv();
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!url || !anonKey) {
     return null;
   }
 
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

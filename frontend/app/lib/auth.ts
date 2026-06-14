@@ -5,7 +5,7 @@ export function isNorthwesternEmail(email: string): boolean {
   return NORTHWESTERN_EMAIL_DOMAINS.some((domain) => normalized.endsWith(domain));
 }
 
-export const PUBLIC_ROUTES = ['/signin', '/auth/callback'] as const;
+export const PUBLIC_ROUTES = ['/signin', '/auth/callback', '/api/auth/signin'] as const;
 
 export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(

@@ -10,6 +10,10 @@ export function useAuth() {
 
   useEffect(() => {
     const supabase = createClient();
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
 
     supabase.auth.getUser().then(({ data: { user: currentUser } }) => {
       setUser(currentUser);
@@ -28,6 +32,10 @@ export function useAuth() {
 
   async function signOut() {
     const supabase = createClient();
+    if (!supabase) {
+      window.location.href = '/signin';
+      return;
+    }
     await supabase.auth.signOut();
     window.location.href = '/signin';
   }

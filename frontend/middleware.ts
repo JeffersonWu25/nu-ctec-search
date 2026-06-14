@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isNorthwesternEmail, isPublicRoute } from '@/app/lib/auth';
+import { isAuthServiceError } from '@/app/lib/supabase/env';
 import { createClient } from '@/app/lib/supabase/middleware';
 
 function redirectToSignIn(request: NextRequest, error?: string) {
@@ -32,7 +33,13 @@ export async function middleware(request: NextRequest) {
 
     const {
       data: { user },
+      error,
     } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error('Supabase auth error:', error);
+      return redirectToSignIn(request, 'service_unavailable');
+    }
 
     if (user?.email && !isNorthwesternEmail(user.email)) {
       await supabase.auth.signOut();
@@ -54,6 +61,9 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   } catch (error) {
     console.error('Middleware auth error:', error);
+    if (isAuthServiceError(error)) {
+      return redirectToSignIn(request, 'service_unavailable');
+    }
     return redirectToSignIn(request, 'auth_failed');
   }
 }
