@@ -8,14 +8,14 @@ export async function GET(request: Request) {
   const redirectTo = searchParams.get('redirect') || '/';
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/signin?error=auth_failed`);
+    return NextResponse.redirect(`${origin}/signin`);
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(`${origin}/signin?error=auth_failed`);
+    return NextResponse.redirect(`${origin}/signin`);
   }
 
   const {
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
   if (!user?.email || !isNorthwesternEmail(user.email)) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(`${origin}/signin?error=invalid_domain`);
+    return NextResponse.redirect(`${origin}/signin`);
   }
 
   return NextResponse.redirect(`${origin}${redirectTo}`);

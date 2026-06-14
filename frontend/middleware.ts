@@ -3,13 +3,11 @@ import { isNorthwesternEmail, isPublicRoute } from '@/app/lib/auth';
 import { isAuthServiceError } from '@/app/lib/supabase/env';
 import { createClient } from '@/app/lib/supabase/middleware';
 
-function redirectToSignIn(request: NextRequest, error?: string) {
+function redirectToSignIn(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = '/signin';
 
-  if (error) {
-    url.searchParams.set('error', error);
-  } else if (request.nextUrl.pathname !== '/') {
+  if (request.nextUrl.pathname !== '/') {
     url.searchParams.set('redirect', request.nextUrl.pathname);
   }
 
@@ -25,7 +23,7 @@ export async function middleware(request: NextRequest) {
 
   const clientResult = createClient(request);
   if (!clientResult) {
-    return redirectToSignIn(request, 'config_error');
+    return redirectToSignIn(request);
   }
 
   try {
@@ -38,12 +36,12 @@ export async function middleware(request: NextRequest) {
 
     if (error) {
       console.error('Supabase auth error:', error);
-      return redirectToSignIn(request, 'service_unavailable');
+      return redirectToSignIn(request);
     }
 
     if (user?.email && !isNorthwesternEmail(user.email)) {
       await supabase.auth.signOut();
-      return redirectToSignIn(request, 'invalid_domain');
+      return redirectToSignIn(request);
     }
 
     if (!user) {
@@ -62,9 +60,9 @@ export async function middleware(request: NextRequest) {
   } catch (error) {
     console.error('Middleware auth error:', error);
     if (isAuthServiceError(error)) {
-      return redirectToSignIn(request, 'service_unavailable');
+      return redirectToSignIn(request);
     }
-    return redirectToSignIn(request, 'auth_failed');
+    return redirectToSignIn(request);
   }
 }
 
