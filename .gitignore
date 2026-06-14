@@ -9,5 +9,5 @@ __pycache__/
 parsed_ctecs.json
 scraped_data/
 CLAUDE.md
-supabase/
+/supabase/
 schema.sql
