@@ -29,8 +29,8 @@ export function useFilterOptions(): FilterOptions {
       try {
         const [deptRes, courseRes, instructorRes, reqRes] = await Promise.all([
           fetch('/api/departments'),
-          fetch('/api/courses?limit=500'),
-          fetch('/api/instructors?limit=500'),
+          fetch('/api/courses?limit=100'),
+          fetch('/api/instructors?limit=100'),
           fetch('/api/requirements'),
         ]);
 

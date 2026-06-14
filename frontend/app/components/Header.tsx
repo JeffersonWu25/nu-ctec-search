@@ -1,6 +1,11 @@
-import Link from "next/link";
+'use client';
+
+import Link from 'next/link';
+import { useAuth } from '@/app/hooks/useAuth';
 
 export default function Header() {
+  const { user, isLoading, signOut } = useAuth();
+
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-gray-200">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -25,15 +30,26 @@ export default function Header() {
           >
             Search
           </Link>
-          <Link
-            href="/signin"
-            className="ml-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg border border-purple-600 hover:border-purple-700 transition-all duration-200 shadow-md hover:shadow-lg"
-          >
-            Sign in
-          </Link>
+          {isLoading ? (
+            <span className="ml-2 px-4 py-2 text-sm text-gray-400">…</span>
+          ) : user ? (
+            <button
+              type="button"
+              onClick={signOut}
+              className="ml-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg border border-gray-200 transition-all duration-200"
+            >
+              Sign out
+            </button>
+          ) : (
+            <Link
+              href="/signin"
+              className="ml-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg border border-purple-600 hover:border-purple-700 transition-all duration-200 shadow-md hover:shadow-lg"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
       </div>
     </header>
   );
 }
-
