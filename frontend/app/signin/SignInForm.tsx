@@ -9,6 +9,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_domain:
     'Only Northwestern University email addresses are allowed. Please sign in with your @northwestern.edu or @u.northwestern.edu account.',
   auth_failed: 'Sign in failed. Please try again.',
+  config_error:
+    'Authentication is not configured. The site administrator must set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in the deployment environment.',
 };
 
 export default function SignInForm() {

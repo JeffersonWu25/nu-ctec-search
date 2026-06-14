@@ -2,41 +2,60 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { isNorthwesternEmail, isPublicRoute } from '@/app/lib/auth';
 import { createClient } from '@/app/lib/supabase/middleware';
 
+function redirectToSignIn(request: NextRequest, error?: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = '/signin';
+
+  if (error) {
+    url.searchParams.set('error', error);
+  } else if (request.nextUrl.pathname !== '/') {
+    url.searchParams.set('redirect', request.nextUrl.pathname);
+  }
+
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(request: NextRequest) {
-  const { supabase, supabaseResponse } = createClient(request);
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
-  if (user?.email && !isNorthwesternEmail(user.email)) {
-    await supabase.auth.signOut();
-    const url = request.nextUrl.clone();
-    url.pathname = '/signin';
-    url.searchParams.set('error', 'invalid_domain');
-    return NextResponse.redirect(url);
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
   }
 
-  if (!user && !isPublicRoute(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/signin';
-    if (pathname !== '/') {
-      url.searchParams.set('redirect', pathname);
+  const clientResult = createClient(request);
+  if (!clientResult) {
+    return redirectToSignIn(request, 'config_error');
+  }
+
+  try {
+    const { supabase, supabaseResponse } = clientResult;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user?.email && !isNorthwesternEmail(user.email)) {
+      await supabase.auth.signOut();
+      return redirectToSignIn(request, 'invalid_domain');
     }
-    return NextResponse.redirect(url);
-  }
 
-  if (user && pathname === '/signin') {
-    const redirectTo = request.nextUrl.searchParams.get('redirect') || '/';
-    const url = request.nextUrl.clone();
-    url.pathname = redirectTo;
-    url.search = '';
-    return NextResponse.redirect(url);
-  }
+    if (!user) {
+      return redirectToSignIn(request);
+    }
 
-  return supabaseResponse;
+    if (pathname === '/signin') {
+      const redirectTo = request.nextUrl.searchParams.get('redirect') || '/';
+      const url = request.nextUrl.clone();
+      url.pathname = redirectTo;
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+
+    return supabaseResponse;
+  } catch (error) {
+    console.error('Middleware auth error:', error);
+    return redirectToSignIn(request, 'auth_failed');
+  }
 }
 
 export const config = {
